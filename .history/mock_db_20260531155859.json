@@ -1,0 +1,11 @@
+{
+  "menus": [
+    { "menuId": "MENU001", "name": "Nasi Goreng", "price": 25000, "category": "makanan", "stock": 50, "isAvailable": true },
+    { "menuId": "MENU002", "name": "Mie Ayam", "price": 20000, "category": "makanan", "stock": 40, "isAvailable": true },
+    { "menuId": "MENU003", "name": "Es Teh", "price": 5000, "category": "minuman", "stock": 100, "isAvailable": true },
+    { "menuId": "MENU004", "name": "Es Jeruk", "price": 8000, "category": "minuman", "stock": 100, "isAvailable": true }
+  ],
+  "orders": [],
+  "customers": [],
+  "payments": []
+}
