@@ -1,4 +1,5 @@
 from app.utils import parse_json
+from datetime import datetime
 
 class KitchenController:
     def __init__(self, db):
@@ -6,42 +7,52 @@ class KitchenController:
         self.orders_collection = db.orders
 
     async def get_pending_orders(self):
-        """Order yang sudah dikonfirmasi tapi belum dimasak"""
+        """Order yang sudah dibayar tapi belum dimasak (status: paid)"""
         cursor = self.orders_collection.find({"status": "paid"})
         orders = await cursor.to_list(length=100)
         return parse_json(orders)
 
     async def get_cooking_orders(self):
-        """Order yang sedang dimasak"""
+        """Order yang sedang dimasak (status: cooking)"""
         cursor = self.orders_collection.find({"status": "cooking"})
         orders = await cursor.to_list(length=100)
         return parse_json(orders)
 
+    async def get_all_kitchen_orders(self):
+        """Ambil semua order untuk kitchen (paid + cooking)"""
+        cursor = self.orders_collection.find({
+            "status": {"$in": ["paid", "cooking"]}
+        })
+        orders = await cursor.to_list(length=100)
+        return parse_json(orders)
+
     async def start_cooking(self, order_id: str):
+        """Kitchen mulai masak → status 'cooking'"""
         order = await self.orders_collection.find_one({"orderId": order_id})
         if not order:
             return None
 
         if order["status"] != "paid":
-            raise ValueError(f"Cannot start cooking order with status {order['status']}")
+            raise ValueError(f"Cannot start cooking order with status {order['status']}. Must be 'paid'")
 
         await self.orders_collection.update_one(
             {"orderId": order_id},
-            {"$set": {"status": "cooking"}}
+            {"$set": {"status": "cooking", "startedAt": datetime.now().isoformat()}}
         )
         return await self.get_order(order_id)
 
     async def done_cooking(self, order_id: str):
+        """Kitchen selesai masak → status 'completed'"""
         order = await self.orders_collection.find_one({"orderId": order_id})
         if not order:
             return None
 
         if order["status"] != "cooking":
-            raise ValueError(f"Cannot complete order with status {order['status']}")
+            raise ValueError(f"Cannot complete order with status {order['status']}. Must be 'cooking'")
 
         await self.orders_collection.update_one(
             {"orderId": order_id},
-            {"$set": {"status": "done"}}
+            {"$set": {"status": "completed", "completedAt": datetime.now().isoformat()}}
         )
         return await self.get_order(order_id)
 

@@ -7,6 +7,7 @@ from app.boundaries import menu_boundary, cashier_boundary, kitchen_boundary
 from app.routes import order_routes
 from app.routes import menu_routes
 from app.routes import inventory_routes
+from app.routes import kitchen_routes 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -34,6 +35,7 @@ app.include_router(kitchen_boundary.router)
 app.include_router(order_routes.router)  # Endpoint orders di sini
 app.include_router(menu_routes.router)  # Endpoint menu di sini
 app.include_router(inventory_routes.router)
+app.include_router(kitchen_routes.router)
 
 @app.get("/")
 async def root():

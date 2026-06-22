@@ -1,6 +1,6 @@
 from datetime import datetime
 import uuid
-from app.utils import parse_json # import parse_json dari main
+from app.utils import parse_json
 
 class OrderController:
     def __init__(self, db):
@@ -13,7 +13,7 @@ class OrderController:
             "orderId": str(uuid.uuid4())[:8],
             "customerName": customer_name,
             "tableNumber": table_number,
-            "status": "draft",
+            "status": "pending",  # ← ganti dari "draft" ke "pending"
             "items": [],
             "totalPrice": 0,
             "createdAt": datetime.now().isoformat()
@@ -68,13 +68,16 @@ class OrderController:
         return parse_json(orders)
 
     async def confirm_order(self, order_id: str):
+        """Kasir konfirmasi order → status 'paid'"""
         order = await self.orders_collection.find_one({"orderId": order_id})
         if not order:
             return None
 
-        if order["status"] != "draft":
+        # Cek status harus pending
+        if order["status"] != "pending":
             raise ValueError(f"Order already {order['status']}")
 
+        # Kurangi stok bahan
         for item in order.get("items", []):
             menu = await self.menus_collection.find_one({"menuId": item["menuId"]})
             if menu:
@@ -86,16 +89,22 @@ class OrderController:
                     {"$set": {"stock": new_stock}}
                 )
 
+        # Update status ke PAID
         await self.orders_collection.update_one(
             {"orderId": order_id},
-            {"$set": {"status": "confirmed"}}
+            {"$set": {"status": "paid", "confirmedAt": datetime.now().isoformat()}}
         )
 
         return await self.get_order(order_id)
 
     async def update_status(self, order_id: str, status: str):
+        """Update status order ke status apapun"""
+        valid_status = ["pending", "paid", "cooking", "completed"]
+        if status not in valid_status:
+            raise ValueError(f"Invalid status. Must be one of: {valid_status}")
+        
         await self.orders_collection.update_one(
             {"orderId": order_id},
-            {"$set": {"status": status}}
+            {"$set": {"status": status, "updatedAt": datetime.now().isoformat()}}
         )
         return await self.get_order(order_id)

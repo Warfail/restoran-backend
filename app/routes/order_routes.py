@@ -1,70 +1,159 @@
 from fastapi import APIRouter, HTTPException, Depends
 from datetime import datetime
 import uuid
+from bson import ObjectId
 from app.config.database import get_db
 
-router = APIRouter()
+router = APIRouter(prefix="/orders", tags=["Orders"])
 
-@router.post("/orders")
+@router.post("/")
 async def create_order(order_data: dict, db = Depends(get_db)):
-    # db langsung siap pakai karena Depends(get_db) akan handle await
-    new_order = {
-        "orderId": f"ORD-{uuid.uuid4().hex[:8].upper()}",
-        "customerName": order_data.get("customerName"),
-        "tableNumber": order_data.get("tableNumber"),
-        "orderType": order_data.get("orderType"),
-        "items": order_data.get("items", []),
-        "totalAmount": order_data.get("totalAmount"),
-        "status": "pending",
-        "createdAt": datetime.now()
-    }
-    
-    result = await db.orders.insert_one(new_order)
-    new_order["_id"] = str(result.inserted_id)
-    
-    return {"success": True, "data": new_order}
+    """
+    Customer membuat pesanan baru dengan menuId
+    """
+    try:
+        # Ambil data dari request
+        customer_name = order_data.get("customerName", "Guest")
+        table_number = order_data.get("tableNumber", 1)
+        items = order_data.get("items", [])
+        
+        if not items:
+            raise HTTPException(status_code=400, detail="Items is required")
+        
+        # Proses setiap item: cari menu berdasarkan menuId
+        processed_items = []
+        total_amount = 0
+        
+        for item in items:
+            menu_id = item.get("menuId")
+            quantity = item.get("quantity", 1)
+            
+            if not menu_id:
+                raise HTTPException(status_code=400, detail="menuId is required for each item")
+            
+            # Cari menu di database
+            menu = await db.menus.find_one({"menuId": menu_id})
+            if not menu:
+                raise HTTPException(status_code=404, detail=f"Menu with ID {menu_id} not found")
+            
+            # Cek stok
+            if menu.get("stock", 0) < quantity:
+                raise HTTPException(status_code=400, detail=f"Stok {menu['name']} tidak cukup. Sisa: {menu['stock']}")
+            
+            # Hitung subtotal
+            price = menu.get("price", 0)
+            subtotal = price * quantity
+            total_amount += subtotal
+            
+            processed_items.append({
+                "menuId": menu_id,
+                "name": menu.get("name"),
+                "price": price,
+                "quantity": quantity,
+                "subtotal": subtotal
+            })
+        
+        # Generate order ID
+        order_id = f"ORD-{uuid.uuid4().hex[:8].upper()}"
+        
+        # Buat order baru
+        new_order = {
+            "orderId": order_id,
+            "customerName": customer_name,
+            "tableNumber": table_number,
+            "orderType": order_data.get("orderType", "Makan di Tempat"),
+            "items": processed_items,
+            "totalAmount": total_amount,
+            "status": "pending",
+            "createdAt": datetime.now().isoformat(),
+            "updatedAt": datetime.now().isoformat()
+        }
+        
+        result = await db.orders.insert_one(new_order)
+        new_order["_id"] = str(result.inserted_id)
+        
+        return {
+            "success": True, 
+            "data": {
+                "orderId": order_id,
+                "status": "pending",
+                "totalAmount": total_amount,
+                "items": processed_items
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("Error creating order:", e)
+        raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/orders/{order_id}")
+
+@router.get("/{order_id}")
 async def get_order(order_id: str, db = Depends(get_db)):
+    """
+    Customer cek status pesanan berdasarkan orderId
+    """
     order = await db.orders.find_one({"orderId": order_id})
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
     
-    # Convert ObjectId dan datetime
     order["_id"] = str(order["_id"])
-    if "createdAt" in order and isinstance(order["createdAt"], datetime):
-        order["createdAt"] = order["createdAt"].isoformat()
-    
     return {"success": True, "data": order}
 
-@router.post("/payments")
+
+@router.post("/payment")
 async def process_payment(payment_data: dict, db = Depends(get_db)):
-    print("Received payment data:", payment_data)  # Debug
+    """
+    Customer melakukan pembayaran berdasarkan orderId
+    """
+    print("Received payment data:", payment_data)
     
-    order_id = payment_data.get("orderId")  # Pake .get() biar aman
+    order_id = payment_data.get("orderId")
     if not order_id:
         raise HTTPException(status_code=400, detail="orderId is required")
     
-    # Update status order jadi paid
+    # Cek order
+    order = await db.orders.find_one({"orderId": order_id})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    if order["status"] != "pending":
+        raise HTTPException(status_code=400, detail=f"Order already {order['status']}")
+    
+    # Update status jadi paid
     result = await db.orders.update_one(
         {"orderId": order_id},
-        {"$set": {"status": "paid", "paymentMethod": payment_data.get("method")}}
+        {"$set": {
+            "status": "paid", 
+            "paymentMethod": payment_data.get("method", "qris"),
+            "updatedAt": datetime.now().isoformat()
+        }}
+    )
+    
+    return {"success": True, "message": "Payment successful", "data": {"orderId": order_id, "status": "paid"}}
+
+@router.put("/{order_id}/confirm-payment")
+async def confirm_payment(order_id: str, db = Depends(get_db)):
+    """
+    Kasir konfirmasi pembayaran (pending → paid)
+    """
+    # Cek order
+    order = await db.orders.find_one({"orderId": order_id})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    if order["status"] != "pending":
+        raise HTTPException(status_code=400, detail=f"Order already {order['status']}")
+    
+    # Update status
+    result = await db.orders.update_one(
+        {"orderId": order_id},
+        {"$set": {"status": "paid", "updatedAt": datetime.now().isoformat()}}
     )
     
     if result.modified_count == 0:
         raise HTTPException(status_code=404, detail="Order not found")
     
-    return {"success": True, "message": "Payment successful"}
+    return {"success": True, "message": "Payment confirmed", "data": {"orderId": order_id, "status": "paid"}}
 
-@router.put("/orders/{order_id}/confirm-payment")
-async def confirm_payment(order_id: str, db = Depends(get_db)):
-    # Update status dari pending ke paid
-    result = await db.orders.update_one(
-        {"orderId": order_id, "status": "pending"},
-        {"$set": {"status": "paid"}}
-    )
-    
-    if result.modified_count == 0:
-        raise HTTPException(status_code=404, detail="Order not found or already paid")
-    
-    return {"success": True, "message": "Payment confirmed"}
