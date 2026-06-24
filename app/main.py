@@ -20,7 +20,7 @@ async def lifespan(app: FastAPI):
     await MongoDB.close()
     print("[OK] Server shutdown")
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(lifespan=lifespan, redirect_slashes=False)
 
 # CORS
 app.add_middleware(
