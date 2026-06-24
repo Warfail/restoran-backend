@@ -7,7 +7,7 @@ from app.boundaries import cashier_boundary, kitchen_boundary
 from app.routes import order_routes
 from app.routes import menu_routes
 from app.routes import inventory_routes
-from app.routes import kitchen_routes 
+from app.routes import kitchen_routes
 from app.routes import user_routes
 from app.routes import auth_routes
 from app.routes import payment_routes
@@ -20,7 +20,7 @@ async def lifespan(app: FastAPI):
     await MongoDB.close()
     print("[OK] Server shutdown")
 
-app = FastAPI(lifespan=lifespan, redirect_slashes=False)
+app = FastAPI(lifespan=lifespan, redirect_slashes=False)  # ← TAMBAHKAN INI
 
 # CORS
 app.add_middleware(
@@ -32,11 +32,10 @@ app.add_middleware(
 )
 
 # Router
-
 app.include_router(cashier_boundary.router)
 app.include_router(kitchen_boundary.router)
-app.include_router(order_routes.router)  # Endpoint orders di sini
-app.include_router(menu_routes.router)  # Endpoint menu di sini
+app.include_router(order_routes.router)
+app.include_router(menu_routes.router)
 app.include_router(inventory_routes.router)
 app.include_router(kitchen_routes.router)
 app.include_router(user_routes.router)
