@@ -32,7 +32,13 @@ async def create_order(order_data: dict, db = Depends(get_db)):
                 raise HTTPException(status_code=400, detail="menuId is required for each item")
             
             # Cari menu di database
-            menu = await db.menus.find_one({"menuId": menu_id})
+            from bson.errors import InvalidId
+            try:
+                query = {"_id": ObjectId(menu_id)}
+            except InvalidId:
+                query = {"$or": [{"menuId": menu_id}, {"kode": menu_id}, {"_id": menu_id}]}
+                
+            menu = await db.menus.find_one(query)
             if not menu:
                 raise HTTPException(status_code=404, detail=f"Menu with ID {menu_id} not found")
             
@@ -156,4 +162,23 @@ async def confirm_payment(order_id: str, db = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Order not found")
     
     return {"success": True, "message": "Payment confirmed", "data": {"orderId": order_id, "status": "paid"}}
+
+@router.put("/{order_id}/payment-method")
+async def update_payment_method(order_id: str, data: dict, db = Depends(get_db)):
+    """
+    Menyimpan metode pembayaran yang dipilih customer sebelum lunas
+    """
+    method = data.get("method")
+    if not method:
+        raise HTTPException(status_code=400, detail="method is required")
+        
+    result = await db.orders.update_one(
+        {"orderId": order_id},
+        {"$set": {"paymentMethod": method, "updatedAt": datetime.now().isoformat()}}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Order not found")
+        
+    return {"success": True, "message": "Payment method updated", "paymentMethod": method}
 

@@ -112,6 +112,20 @@ async def update_order_status(
     return {"success": True, "message": f"Order status updated to {new_status}"}
 
 
+@router.put("/order/{order_id}/printed")
+async def mark_order_printed(order_id: str, db = Depends(get_db)):
+    """Tandai order sudah dicetak struknya"""
+    result = await db.orders.update_one(
+        {"orderId": order_id},
+        {"$set": {"isPrinted": True, "updatedAt": datetime.now().isoformat()}}
+    )
+    if result.modified_count == 0:
+        return {"success": False, "message": "Order not found or already marked"}
+    return {"success": True, "message": "Order marked as printed"}
+
+
+
+
 @router.post("/payment")
 async def process_payment(
     order_id: str,

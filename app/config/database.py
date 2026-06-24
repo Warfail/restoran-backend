@@ -16,17 +16,17 @@ class MongoDB:
         if cls.client is None:
             cls.client = AsyncIOMotorClient(MONGODB_URL)
             cls.database = cls.client[DATABASE_NAME]
-            print(f"✅ Connected to MongoDB at {MONGODB_URL}")
+            print(f"[OK] Connected to MongoDB at {MONGODB_URL}")
             
             # Test ping
             await cls.database.command("ping")
-            print("✅ Database ping successful")
+            print("Database ping successful")
 
     @classmethod
     async def close(cls):
         if cls.client:
             cls.client.close()
-            print("❌ Disconnected from MongoDB")
+            print("[OK] Disconnected from MongoDB")
 
     @classmethod
     def get_db(cls):

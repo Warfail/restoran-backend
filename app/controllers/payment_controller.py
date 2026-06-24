@@ -13,10 +13,10 @@ class PaymentController:
         if not order:
             return None
 
-        if order["status"] != "confirmed":
-            return {"success": False, "message": "Order belum dikonfirmasi kasir"}
+        if order["status"] not in ["pending", "confirmed"]:
+            return {"success": False, "message": "Order sudah dibayar atau tidak valid"}
 
-        total = order["totalPrice"]
+        total = order.get("totalAmount", order.get("totalPrice", 0))
 
         if amount_paid < total:
             return {"success": False, "message": f"Uang kurang. Total: Rp{total}"}
@@ -45,19 +45,35 @@ class PaymentController:
 
     async def get_receipt(self, order_id: str):
         payment = await self.payments_collection.find_one({"orderId": order_id})
-        if not payment:
-            return None
-
         order = await self.orders_collection.find_one({"orderId": order_id})
         
+        if not order:
+            return None
+
+        # Jika pembayaran dilakukan online (QRIS/Transfer), record di collection payments mungkin tidak ada.
+        # Kita fallback menggunakan data dari collection orders.
+        if not payment:
+            total = order.get("totalAmount", order.get("totalPrice", 0))
+            return {
+                "receiptId": f"REC-{order_id[-6:]}",
+                "orderId": order_id,
+                "customerName": order.get("customerName", "-"),
+                "tableNumber": order.get("tableNumber", "-"),
+                "items": order.get("items", []),
+                "totalPrice": total,
+                "amountPaid": total,
+                "change": 0,
+                "paymentDate": order.get("updatedAt", order.get("createdAt", datetime.now().isoformat()))
+            }
+
         return {
-            "receiptId": payment["paymentId"],
+            "receiptId": payment.get("paymentId", f"REC-{order_id[-6:]}"),
             "orderId": order_id,
-            "customerName": order.get("customerName") if order else "-",
-            "tableNumber": order.get("tableNumber") if order else "-",
-            "items": order.get("items", []) if order else [],
-            "totalPrice": payment["totalPrice"],
-            "amountPaid": payment["amountPaid"],
-            "change": payment["change"],
-            "paymentDate": payment["paymentDate"]
+            "customerName": order.get("customerName", "-"),
+            "tableNumber": order.get("tableNumber", "-"),
+            "items": order.get("items", []),
+            "totalPrice": payment.get("totalPrice", order.get("totalAmount", 0)),
+            "amountPaid": payment.get("amountPaid", order.get("totalAmount", 0)),
+            "change": payment.get("change", 0),
+            "paymentDate": payment.get("paymentDate", datetime.now().isoformat())
         }
