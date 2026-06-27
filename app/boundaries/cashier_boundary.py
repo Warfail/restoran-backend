@@ -101,15 +101,14 @@ async def update_order_status(
     if new_status not in ["paid", "completed"]:
         raise HTTPException(status_code=400, detail="Invalid status. Use 'paid' or 'completed'")
     
-    result = await db.orders.update_one(
-        {"orderId": order_id},
-        {"$set": {"status": new_status, "updatedAt": datetime.now().isoformat()}}
-    )
-    
-    if result.modified_count == 0:
-        raise HTTPException(status_code=404, detail="Order not found")
-    
-    return {"success": True, "message": f"Order status updated to {new_status}"}
+    try:
+        controller = get_order_controller(db)
+        await controller.update_status(order_id, new_status)
+        return {"success": True, "message": f"Order status updated to {new_status}"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.put("/order/{order_id}/printed")

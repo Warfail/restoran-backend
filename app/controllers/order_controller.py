@@ -78,16 +78,27 @@ class OrderController:
             raise ValueError(f"Order already {order['status']}")
 
         # Kurangi stok bahan
-        for item in order.get("items", []):
-            menu = await self.menus_collection.find_one({"menuId": item["menuId"]})
-            if menu:
-                if menu["stock"] < item["quantity"]:
-                    raise ValueError(f"Stok {menu['name']} tidak cukup")
-                new_stock = menu["stock"] - item["quantity"]
-                await self.menus_collection.update_one(
-                    {"menuId": item["menuId"]},
-                    {"$set": {"stock": new_stock}}
-                )
+        if not order.get("ingredientsDeducted", False):
+            for item in order.get("items", []):
+                menu = await self.menus_collection.find_one({"menuId": item["menuId"]})
+                if menu and menu.get("ingredients"):
+                    for ing in menu["ingredients"]:
+                        inv_id = ing.get("inventory_id")
+                        qty_needed = ing.get("quantity_needed", 0) * item.get("quantity", 1)
+                        if inv_id and qty_needed > 0:
+                            from bson import ObjectId
+                            try:
+                                await self.db.inventory.update_one(
+                                    {"_id": ObjectId(inv_id)},
+                                    {"$inc": {"stock": -qty_needed}}
+                                )
+                            except Exception as e:
+                                print(f"Error deducting stock: {e}")
+            
+            await self.orders_collection.update_one(
+                {"orderId": order_id},
+                {"$set": {"ingredientsDeducted": True}}
+            )
 
         # Update status ke PAID
         await self.orders_collection.update_one(
@@ -102,6 +113,37 @@ class OrderController:
         valid_status = ["pending", "paid", "cooking", "completed"]
         if status not in valid_status:
             raise ValueError(f"Invalid status. Must be one of: {valid_status}")
+        
+        order = await self.orders_collection.find_one({"orderId": order_id})
+        if not order:
+            raise ValueError("Order not found")
+
+        # Deduct inventory stock based on recipe (BoM) when starting to cook or if completed directly
+        if status in ["cooking", "completed"] and not order.get("ingredientsDeducted", False):
+            for item in order.get("items", []):
+                menu_id_val = item.get("menuId")
+                menu = await self.menus_collection.find_one({
+                    "$or": [{"menuId": menu_id_val}, {"kode": menu_id_val}]
+                })
+                if menu and menu.get("ingredients"):
+                    for ing in menu["ingredients"]:
+                        inv_id = ing.get("inventory_id")
+                        qty_needed = ing.get("quantity_needed", 0) * item.get("quantity", 1)
+                        if inv_id and qty_needed > 0:
+                            from bson import ObjectId
+                            try:
+                                await self.db.inventory.update_one(
+                                    {"_id": ObjectId(inv_id)},
+                                    {"$inc": {"stock": -qty_needed}}
+                                )
+                            except Exception as e:
+                                print(f"Error deducting stock: {e}")
+
+            # Mark as deducted to avoid double counting
+            await self.orders_collection.update_one(
+                {"orderId": order_id},
+                {"$set": {"ingredientsDeducted": True}}
+            )
         
         await self.orders_collection.update_one(
             {"orderId": order_id},
