@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from datetime import datetime
 from bson import ObjectId
 from app.config.database import get_db
+from app.utils.serializers import serialize_document, serialize_list, serialize_value 
 
 router = APIRouter(prefix="/inventory", tags=["Inventory"])
 
@@ -152,16 +153,12 @@ async def reduce_stock(data: dict, db = Depends(get_db)):
                     {"$set": {"stock": new_stock, "updatedAt": datetime.now().isoformat()}}
                 )
                 
-                # 🔥 CONVERT semua ObjectId ke string
-                menu_id_str = menu.get("menuId") or str(menu["_id"])
-                inventory_id_str = inventory.get("ingredientId") or str(inventory["_id"])
-                
-                # Simpan log
+                # 🔥 PAKE SERIALIZER
                 log = {
                     "orderId": str(order_id),
-                    "menuId": str(menu_id_str),
+                    "menuId": menu.get("menuId") or str(menu["_id"]),
                     "menuName": str(menu.get("name")),
-                    "ingredientId": str(inventory_id_str),
+                    "ingredientId": inventory.get("ingredientId") or str(inventory["_id"]),
                     "ingredientName": str(inventory.get("name")),
                     "quantity": float(ingredient_qty),
                     "unit": str(unit),
@@ -173,11 +170,14 @@ async def reduce_stock(data: dict, db = Depends(get_db)):
                 logs.append(log)
                 await db.stock_logs.insert_one(log)
         
-        # 🔥 Pastikan semua data udah JSON serializable
+        # 🔥 Serialize semua data sebelum return
+        serialized_logs = [serialize_document(log) for log in logs]
+        serialized_errors = [str(e) for e in errors]
+        
         return {
             "success": len(errors) == 0,
-            "errors": [str(e) for e in errors],
-            "logs": logs
+            "errors": serialized_errors,
+            "logs": serialized_logs
         }
     except Exception as e:
         print(f"Error in reduce_stock: {str(e)}")
