@@ -28,6 +28,12 @@ async def update_kitchen_order_status(order_id: str, status_data: dict, db = Dep
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
     
+    # 🔥 Jika status berubah ke "cooking", kurangi stok
+    if new_status == "cooking" and order["status"] != "cooking":
+        # Panggil fungsi reduce_stock
+        from app.routes.inventory_routes import reduce_stock
+        await reduce_stock({"orderId": order_id, "items": order.get("items", [])}, db)
+    
     result = await db.orders.update_one(
         {"orderId": order_id},
         {"$set": {"status": new_status, "updatedAt": datetime.now().isoformat()}}

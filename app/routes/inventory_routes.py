@@ -84,3 +84,88 @@ async def delete_inventory_item(item_id: str, db = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Item not found")
     
     return {"success": True, "message": "Item deleted"}
+
+
+@router.post("/reduce")
+async def reduce_stock(data: dict, db = Depends(get_db)):
+    """
+    Kurangi stok bahan berdasarkan recipe
+    """
+    order_id = data.get("orderId")
+    items = data.get("items", [])
+    
+    if not order_id:
+        raise HTTPException(status_code=400, detail="orderId is required")
+    
+    logs = []
+    errors = []
+    
+    # Ambil order detail
+    order = await db.orders.find_one({"orderId": order_id})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    for item in order.get("items", []):
+        menu_id = item.get("menuId")
+        quantity = item.get("quantity", 1)
+        
+        # Cari menu
+        menu = await db.menus.find_one({"$or": [{"_id": ObjectId(menu_id)}, {"menuId": menu_id}]})
+        if not menu:
+            errors.append(f"Menu {menu_id} not found")
+            continue
+        
+        recipe = menu.get("recipe", [])
+        if not recipe:
+            continue
+        
+        # Untuk setiap bahan di recipe
+        for ingredient in recipe:
+            ingredient_id = ingredient.get("ingredientId")
+            ingredient_name = ingredient.get("name")
+            ingredient_qty = ingredient.get("quantity", 0) * quantity
+            unit = ingredient.get("unit", "unit")
+            
+            # Cari inventory
+            inventory = await db.inventory.find_one({"ingredientId": ingredient_id})
+            if not inventory:
+                inventory = await db.inventory.find_one({"name": ingredient_name})
+            
+            if not inventory:
+                errors.append(f"Ingredient {ingredient_name} not found in inventory")
+                continue
+            
+            # Cek stok cukup?
+            if inventory["stock"] < ingredient_qty:
+                errors.append(f"Stok {ingredient_name} tidak cukup! Sisa: {inventory['stock']} {inventory['unit']}")
+                continue
+            
+            # Kurangi stok
+            new_stock = inventory["stock"] - ingredient_qty
+            await db.inventory.update_one(
+                {"_id": inventory["_id"]},
+                {"$set": {"stock": new_stock, "updatedAt": datetime.now().isoformat()}}
+            )
+            
+            # Simpan log
+            log = {
+                "orderId": order_id,
+                "menuId": menu.get("menuId") or str(menu["_id"]),
+                "menuName": menu.get("name"),
+                "ingredientId": inventory.get("ingredientId") or str(inventory["_id"]),
+                "ingredientName": inventory.get("name"),
+                "quantity": ingredient_qty,
+                "unit": unit,
+                "action": "used",
+                "timestamp": datetime.now().isoformat(),
+                "remainingStock": new_stock,
+                "performedBy": "kitchen"
+            }
+            logs.append(log)
+            await db.stock_logs.insert_one(log)
+    
+    return {
+        "success": len(errors) == 0,
+        "errors": errors,
+        "logs": logs
+    }

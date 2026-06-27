@@ -26,6 +26,7 @@ async def create_menu(menu_data: dict, db = Depends(get_db)):
         "description": str(menu_data.get("description", "")),
         "isAvailable": bool(menu_data.get("isAvailable", True)),
         "image": str(menu_data.get("image", "https://placehold.co/100x80/c8a96e/c8a96e")),
+         "recipe": menu_data.get("recipe", []),
         "createdAt": datetime.now(),
         "updatedAt": datetime.now()
     }
