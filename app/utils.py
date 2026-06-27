@@ -1,7 +1,7 @@
 from bson import ObjectId
 import json
 from datetime import datetime
-from .serializers import serialize_document, serialize_list, serialize_value
+from app.utils.serializers import serialize_document, serialize_list, serialize_value
 
 class CustomJSONEncoder(json.JSONEncoder):
     def default(self, obj):
