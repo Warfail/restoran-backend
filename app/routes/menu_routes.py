@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from datetime import datetime
 from bson import ObjectId
 from app.config.database import get_db
+from serializers import serialize_document, serialize_list, serialize_value
 
 router = APIRouter(prefix="/menu", tags=["Menu"])
 
@@ -34,17 +35,15 @@ async def create_menu(menu_data: dict, db = Depends(get_db)):
     print(f"✅ SAVING: price={price} ({type(price).__name__}), stock={stock} ({type(stock).__name__})")
     
     result = await db.menus.insert_one(menu_dict)
-    menu_dict["_id"] = str(result.inserted_id)
-    
-    return {"success": True, "data": menu_dict}
+    menu_dict["_id"] = result.inserted_id
+
+    return {"success": True, "data": serialize_document(menu_dict)}
 
 @router.get("/")
 async def get_all_menus(db = Depends(get_db)):
     cursor = db.menus.find({})
     menus = await cursor.to_list(length=100)
-    for menu in menus:
-        menu["_id"] = str(menu["_id"])
-    return {"success": True, "data": menus}
+    return {"success": True, "data": serialize_list(menus)}
 
 @router.get("/{menu_id}")
 async def get_menu(menu_id: str, db = Depends(get_db)):
@@ -54,8 +53,7 @@ async def get_menu(menu_id: str, db = Depends(get_db)):
     menu = await db.menus.find_one({"_id": ObjectId(menu_id)})
     if not menu:
         raise HTTPException(status_code=404, detail="Menu not found")
-    menu["_id"] = str(menu["_id"])
-    return {"success": True, "data": menu}
+    return {"success": True, "data": serialize_document(menu)}
 
 @router.put("/{menu_id}")
 async def update_menu(menu_id: str, menu_data: dict, db = Depends(get_db)):

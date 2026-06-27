@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from app.controllers.kitchen_controller import KitchenController
 from app.config.database import get_db
+from serializers import serialize_document, serialize_list, serialize_value
 
 router = APIRouter(prefix="/kitchen", tags=["Kitchen"])
 
@@ -12,14 +13,14 @@ def get_kitchen_controller(db=Depends(get_db)):
 async def get_pending_orders(controller: KitchenController = Depends(get_kitchen_controller)):
     """Kitchen melihat order yang pending"""
     orders = await controller.get_pending_orders()
-    return {"success": True, "data": orders}
+    return {"success": True, "data": serialize_list(orders)}
 
 
 @router.get("/orders/cooking")
 async def get_cooking_orders(controller: KitchenController = Depends(get_kitchen_controller)):
     """Kitchen melihat order yang sedang dimasak"""
     orders = await controller.get_cooking_orders()
-    return {"success": True, "data": orders}
+    return {"success": True, "data": serialize_list(orders)}
 
 
 @router.put("/order/{order_id}/start")
@@ -32,7 +33,7 @@ async def start_cooking(
         order = await controller.start_cooking(order_id)
         if not order:
             raise HTTPException(status_code=404, detail="Order not found")
-        return {"success": True, "data": order}
+        return {"success": True, "data": serialize_document(order)}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -47,6 +48,6 @@ async def done_cooking(
         order = await controller.done_cooking(order_id)
         if not order:
             raise HTTPException(status_code=404, detail="Order not found")
-        return {"success": True, "data": order}
+        return {"success": True, "data": serialize_document(order)}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

@@ -3,6 +3,7 @@ from bson import ObjectId
 from app.config.database import get_db
 import uuid
 from datetime import datetime
+from serializers import serialize_document, serialize_list, serialize_value
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -10,9 +11,7 @@ router = APIRouter(prefix="/users", tags=["Users"])
 async def get_users(db = Depends(get_db)):
     cursor = db.users.find({})
     users = await cursor.to_list(length=100)
-    for u in users:
-        u["_id"] = str(u["_id"])
-    return {"success": True, "data": users}
+    return {"success": True, "data": serialize_list(users)}
 
 @router.post("/")
 async def create_user(user_data: dict, db = Depends(get_db)):
@@ -37,8 +36,8 @@ async def create_user(user_data: dict, db = Depends(get_db)):
         "createdAt": datetime.now().isoformat()
     }
     result = await db.users.insert_one(new_user)
-    new_user["_id"] = str(result.inserted_id)
-    return {"success": True, "data": new_user}
+    new_user["_id"] = result.inserted_id
+    return {"success": True, "data": serialize_document(new_user)}
 
 @router.put("/{user_id}")
 async def update_user(user_id: str, data: dict, db = Depends(get_db)):

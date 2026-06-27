@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends
 from datetime import datetime
 from app.config.database import get_db
+from serializers import serialize_document, serialize_list, serialize_value
 
 router = APIRouter(prefix="/kitchen", tags=["Kitchen"])
 
@@ -10,12 +11,7 @@ async def get_kitchen_orders(db = Depends(get_db)):
         "status": {"$in": ["paid", "cooking"]}
     }).to_list(length=100)
     
-    for order in orders:
-        order["_id"] = str(order["_id"])
-        if "createdAt" in order and isinstance(order["createdAt"], datetime):
-            order["createdAt"] = order["createdAt"].isoformat()
-    
-    return {"success": True, "data": orders}
+    return {"success": True, "data": serialize_list(orders)}
 
 @router.put("/orders/{order_id}/status")
 async def update_kitchen_order_status(order_id: str, status_data: dict, db = Depends(get_db)):

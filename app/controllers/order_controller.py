@@ -1,6 +1,7 @@
 from datetime import datetime
 import uuid
 from app.utils import parse_json
+from serializers import serialize_document, serialize_list, serialize_value
 
 class OrderController:
     def __init__(self, db):
@@ -60,12 +61,12 @@ class OrderController:
 
     async def get_order(self, order_id: str):
         order = await self.orders_collection.find_one({"orderId": order_id})
-        return parse_json(order)
+        return serialize_document(order)
 
     async def get_all_orders(self):
         cursor = self.orders_collection.find({})
         orders = await cursor.to_list(length=100)
-        return parse_json(orders)
+        return serialize_list(orders)
 
     async def confirm_order(self, order_id: str):
         """Kasir konfirmasi order → status 'paid'"""
