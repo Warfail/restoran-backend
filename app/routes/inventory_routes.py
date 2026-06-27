@@ -92,7 +92,6 @@ async def reduce_stock(data: dict, db = Depends(get_db)):
     Kurangi stok bahan berdasarkan recipe
     """
     order_id = data.get("orderId")
-    items = data.get("items", [])
     
     if not order_id:
         raise HTTPException(status_code=400, detail="orderId is required")
@@ -109,8 +108,13 @@ async def reduce_stock(data: dict, db = Depends(get_db)):
         menu_id = item.get("menuId")
         quantity = item.get("quantity", 1)
         
-        # Cari menu
-        menu = await db.menus.find_one({"$or": [{"_id": ObjectId(menu_id)}, {"menuId": menu_id}]})
+        # Cari menu - coba sebagai ObjectId dulu, lalu sebagai menuId string
+        menu = None
+        if ObjectId.is_valid(menu_id):
+            menu = await db.menus.find_one({"_id": ObjectId(menu_id)})
+        if not menu:
+            menu = await db.menus.find_one({"menuId": menu_id})
+        
         if not menu:
             errors.append(f"Menu {menu_id} not found")
             continue
