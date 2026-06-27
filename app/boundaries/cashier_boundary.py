@@ -4,6 +4,7 @@ from app.controllers.order_controller import OrderController
 from app.controllers.payment_controller import PaymentController
 from app.config.database import get_db
 from app.utils import parse_json
+from serializers import serialize_document, serialize_list, serialize_value
 
 router = APIRouter(prefix="/cashier", tags=["Cashier"])
 
@@ -24,14 +25,7 @@ async def get_all_orders(db = Depends(get_db)):
         cursor = db.orders.find({}).sort("createdAt", -1)
         orders = await cursor.to_list(length=100)
         
-        for order in orders:
-            order["_id"] = str(order["_id"])
-            if "createdAt" in order and isinstance(order["createdAt"], datetime):
-                order["createdAt"] = order["createdAt"].isoformat()
-            if "updatedAt" in order and isinstance(order["updatedAt"], datetime):
-                order["updatedAt"] = order["updatedAt"].isoformat()
-        
-        return {"success": True, "data": orders}
+        return {"success": True, "data": serialize_list(orders)}
     except Exception as e:
         print("Error in get_all_orders:", e)
         return {"success": False, "error": str(e), "data": []}
@@ -48,14 +42,7 @@ async def get_ongoing_orders(db = Depends(get_db)):
         }).sort("createdAt", -1)
         orders = await cursor.to_list(length=100)
         
-        for order in orders:
-            order["_id"] = str(order["_id"])
-            if "createdAt" in order and isinstance(order["createdAt"], datetime):
-                order["createdAt"] = order["createdAt"].isoformat()
-            if "updatedAt" in order and isinstance(order["updatedAt"], datetime):
-                order["updatedAt"] = order["updatedAt"].isoformat()
-        
-        return {"success": True, "data": orders}
+        return {"success": True, "data": serialize_list(orders)}
     except Exception as e:
         print("Error in get_ongoing_orders:", e)
         return {"success": False, "error": str(e), "data": []}

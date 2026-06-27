@@ -3,6 +3,7 @@ from datetime import datetime
 import uuid
 from bson import ObjectId
 from app.config.database import get_db
+from serializers import serialize_document, serialize_list, serialize_value
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
 
@@ -104,8 +105,7 @@ async def get_order(order_id: str, db = Depends(get_db)):
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
     
-    order["_id"] = str(order["_id"])
-    return {"success": True, "data": order}
+    return {"success": True, "data": serialize_document(order)}
 
 
 @router.post("/payment")

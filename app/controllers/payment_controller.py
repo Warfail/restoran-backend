@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime
 from app.utils import parse_json
+from serializers import serialize_document, serialize_list, serialize_value
 
 class PaymentController:
     def __init__(self, db):
@@ -41,7 +42,7 @@ class PaymentController:
             {"$set": {"status": "paid"}}
         )
 
-        return {"success": True, "payment": parse_json(payment), "change": change}
+        return {"success": True, "payment": serialize_document(payment), "change": change}
 
     async def get_receipt(self, order_id: str):
         payment = await self.payments_collection.find_one({"orderId": order_id})

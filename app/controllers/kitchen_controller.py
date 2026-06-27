@@ -1,5 +1,6 @@
 from app.utils import parse_json
 from datetime import datetime
+from serializers import serialize_document, serialize_list, serialize_value
 
 class KitchenController:
     def __init__(self, db):
@@ -10,13 +11,13 @@ class KitchenController:
         """Order yang sudah dibayar tapi belum dimasak (status: paid)"""
         cursor = self.orders_collection.find({"status": "paid"})
         orders = await cursor.to_list(length=100)
-        return parse_json(orders)
+        return serialize_list(orders)
 
     async def get_cooking_orders(self):
         """Order yang sedang dimasak (status: cooking)"""
         cursor = self.orders_collection.find({"status": "cooking"})
         orders = await cursor.to_list(length=100)
-        return parse_json(orders)
+        return serialize_list(orders)
 
     async def get_all_kitchen_orders(self):
         """Ambil semua order untuk kitchen (paid + cooking)"""
@@ -24,7 +25,7 @@ class KitchenController:
             "status": {"$in": ["paid", "cooking"]}
         })
         orders = await cursor.to_list(length=100)
-        return parse_json(orders)
+        return serialize_list(orders)
 
     async def start_cooking(self, order_id: str):
         """Kitchen mulai masak → status 'cooking'"""
@@ -85,4 +86,4 @@ class KitchenController:
 
     async def get_order(self, order_id: str):
         order = await self.orders_collection.find_one({"orderId": order_id})
-        return parse_json(order)
+        return serialize_document(order)

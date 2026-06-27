@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from datetime import datetime
 from bson import ObjectId
 from app.config.database import get_db
-from app.utils.serializers import serialize_document, serialize_list, serialize_value 
+from serializers import serialize_document, serialize_list, serialize_value
 
 router = APIRouter(prefix="/inventory", tags=["Inventory"])
 
@@ -10,9 +10,7 @@ router = APIRouter(prefix="/inventory", tags=["Inventory"])
 async def get_all_inventory(db = Depends(get_db)):
     cursor = db.inventory.find({})
     items = await cursor.to_list(length=100)
-    for item in items:
-        item["_id"] = str(item["_id"])
-    return {"success": True, "data": items}
+    return {"success": True, "data": serialize_list(items)}
 
 @router.get("/{item_id}")
 async def get_inventory_item(item_id: str, db = Depends(get_db)):
@@ -22,9 +20,8 @@ async def get_inventory_item(item_id: str, db = Depends(get_db)):
     item = await db.inventory.find_one({"_id": ObjectId(item_id)})
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
-    
-    item["_id"] = str(item["_id"])
-    return {"success": True, "data": item}
+
+    return {"success": True, "data": serialize_document(item)}
 
 @router.post("/")
 async def create_inventory_item(item_data: dict, db = Depends(get_db)):
@@ -45,9 +42,9 @@ async def create_inventory_item(item_data: dict, db = Depends(get_db)):
     }
     
     result = await db.inventory.insert_one(item_dict)
-    item_dict["_id"] = str(result.inserted_id)
-    
-    return {"success": True, "data": item_dict}
+    item_dict["_id"] = result.inserted_id
+
+    return {"success": True, "data": serialize_document(item_dict)}
 
 @router.put("/{item_id}")
 async def update_inventory_stock(item_id: str, update_data: dict, db = Depends(get_db)):
