@@ -30,6 +30,10 @@ async def create_transaction(order_data: dict, db=Depends(get_db)):
     order = await db.orders.find_one({"orderId": order_id})
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
+        
+    server_key = os.getenv("MIDTRANS_SERVER_KEY")
+    if not server_key or server_key == "YOUR_SERVER_KEY":
+        raise HTTPException(status_code=500, detail="Server Key Midtrans belum dikonfigurasi di .env backend")
     
     # Build param untuk Midtrans
     param = {
