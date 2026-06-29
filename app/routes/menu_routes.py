@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from datetime import datetime
 from bson import ObjectId
 from app.config.database import get_db
+from app.utils import serialize_document, serialize_list, serialize_value
 
 router = APIRouter(prefix="/menu", tags=["Menu"])
 
@@ -26,6 +27,7 @@ async def create_menu(menu_data: dict, db = Depends(get_db)):
         "description": str(menu_data.get("description", "")),
         "isAvailable": bool(menu_data.get("isAvailable", True)),
         "image": str(menu_data.get("image", "https://placehold.co/100x80/c8a96e/c8a96e")),
+         "recipe": menu_data.get("recipe", []),
         "createdAt": datetime.now(),
         "updatedAt": datetime.now()
     }

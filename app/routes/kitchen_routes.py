@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends
 from datetime import datetime
 from app.config.database import get_db
+from app.utils import serialize_document, serialize_list, serialize_value
 
 router = APIRouter(prefix="/kitchen", tags=["Kitchen"])
 
@@ -27,6 +28,12 @@ async def update_kitchen_order_status(order_id: str, status_data: dict, db = Dep
     order = await db.orders.find_one({"orderId": order_id})
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
+    
+    # 🔥 Jika status berubah ke "cooking", kurangi stok
+    if new_status == "cooking" and order["status"] != "cooking":
+        # Panggil fungsi reduce_stock
+        from app.routes.inventory_routes import reduce_stock
+        await reduce_stock({"orderId": order_id, "items": order.get("items", [])}, db)
     
     result = await db.orders.update_one(
         {"orderId": order_id},
