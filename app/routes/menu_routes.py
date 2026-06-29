@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from datetime import datetime
 from bson import ObjectId
 from app.config.database import get_db
-from serializers import serialize_document, serialize_list, serialize_value
+from app.utils import serialize_document, serialize_list, serialize_value
 
 router = APIRouter(prefix="/menu", tags=["Menu"])
 
