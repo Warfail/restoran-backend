@@ -39,22 +39,35 @@ class KitchenController:
         if not order.get("ingredientsDeducted", False):
             for item in order.get("items", []):
                 menu_id_val = item.get("menuId")
-                menu = await self.db.menus.find_one({
-                    "$or": [{"menuId": menu_id_val}, {"kode": menu_id_val}]
-                })
-                if menu and menu.get("ingredients"):
-                    for ing in menu["ingredients"]:
-                        inv_id = ing.get("inventory_id")
-                        qty_needed = ing.get("quantity_needed", 0) * item.get("quantity", 1)
-                        if inv_id and qty_needed > 0:
-                            from bson import ObjectId
-                            try:
-                                await self.db.inventory.update_one(
-                                    {"_id": ObjectId(inv_id)},
-                                    {"$inc": {"stock": -qty_needed}}
-                                )
-                            except Exception as e:
-                                print(f"Error deducting stock: {e}")
+                from bson import ObjectId
+                from bson.errors import InvalidId
+                try:
+                    query = {"_id": ObjectId(menu_id_val)}
+                except (InvalidId, TypeError):
+                    query = {"$or": [{"menuId": menu_id_val}, {"kode": menu_id_val}]}
+                
+                menu = await self.db.menus.find_one(query)
+                if menu:
+                    if menu.get("stock", 0) >= item.get("quantity", 1):
+                        new_stock = menu.get("stock", 0) - item.get("quantity", 1)
+                        await self.db.menus.update_one(
+                            {"_id": menu["_id"]},
+                            {"$set": {"stock": new_stock}}
+                        )
+
+                    if menu.get("ingredients"):
+                        for ing in menu["ingredients"]:
+                            inv_id = ing.get("inventory_id")
+                            qty_needed = ing.get("quantity_needed", 0) * item.get("quantity", 1)
+                            if inv_id and qty_needed > 0:
+                                from bson import ObjectId
+                                try:
+                                    await self.db.inventory.update_one(
+                                        {"_id": ObjectId(inv_id)},
+                                        {"$inc": {"stock": -qty_needed}}
+                                    )
+                                except Exception as e:
+                                    print(f"Error deducting stock: {e}")
 
             # Mark as deducted to avoid double counting
             await self.orders_collection.update_one(

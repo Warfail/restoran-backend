@@ -119,14 +119,19 @@ async def payment_notification(notification_data: dict, db=Depends(get_db)):
         elif transaction_status == "pending":
             new_status = "pending"
         
+        # Update status payment khusus midtrans dulu
         await db.orders.update_one(
             {"orderId": order_id},
             {"$set": {
                 "payment_status": transaction_status,
-                "status": new_status,
                 "payment_updated_at": datetime.now().isoformat(),
             }}
         )
+        
+        # Gunakan OrderController agar logika potong stok dll tetap berjalan
+        from app.controllers.order_controller import OrderController
+        order_ctrl = OrderController(db)
+        await order_ctrl.update_status(order_id, new_status)
         
         print(f"✅ Payment notification: {order_id} -> {new_status}")
         return {"success": True}

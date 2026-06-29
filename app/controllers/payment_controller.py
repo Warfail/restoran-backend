@@ -35,11 +35,10 @@ class PaymentController:
 
         await self.payments_collection.insert_one(payment)
 
-        # Update status order
-        await self.orders_collection.update_one(
-            {"orderId": order_id},
-            {"$set": {"status": "paid"}}
-        )
+        # Update status order and deduct stock
+        from app.controllers.order_controller import OrderController
+        order_ctrl = OrderController(self.db)
+        await order_ctrl.update_status(order_id, "paid")
 
         return {"success": True, "payment": parse_json(payment), "change": change}
 
@@ -63,7 +62,8 @@ class PaymentController:
                 "totalPrice": total,
                 "amountPaid": total,
                 "change": 0,
-                "paymentDate": order.get("updatedAt", order.get("createdAt", datetime.now().isoformat()))
+                "paymentDate": order.get("updatedAt", order.get("createdAt", datetime.now().isoformat())),
+                "paymentMethod": order.get("paymentMethod", "Tunai")
             }
 
         return {
@@ -75,5 +75,6 @@ class PaymentController:
             "totalPrice": payment.get("totalPrice", order.get("totalAmount", 0)),
             "amountPaid": payment.get("amountPaid", order.get("totalAmount", 0)),
             "change": payment.get("change", 0),
-            "paymentDate": payment.get("paymentDate", datetime.now().isoformat())
+            "paymentDate": payment.get("paymentDate", datetime.now().isoformat()),
+            "paymentMethod": order.get("paymentMethod", "Tunai")
         }
