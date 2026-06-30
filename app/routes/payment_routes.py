@@ -35,6 +35,14 @@ async def create_transaction(order_data: dict, db=Depends(get_db)):
     if not server_key or server_key == "YOUR_SERVER_KEY":
         raise HTTPException(status_code=500, detail="Server Key Midtrans belum dikonfigurasi di .env backend")
     
+    # Jika sudah pernah buat token dan status masih pending, kembalikan token lama
+    if order.get("midtrans_token") and order.get("payment_status") == "pending":
+        return {
+            "success": True,
+            "token": order.get("midtrans_token"),
+            "redirect_url": order.get("midtrans_redirect_url"),
+        }
+    
     # Build param untuk Midtrans
     param = {
         "transaction_details": {
@@ -143,6 +151,31 @@ async def payment_notification(notification_data: dict, db=Depends(get_db)):
     except Exception as e:
         print("Webhook error:", str(e))
         return {"success": False, "error": str(e)}
+
+@router.post("/local-success")
+async def local_payment_success(data: dict, db=Depends(get_db)):
+    """
+    Endpoint khusus untuk sinkronisasi sukses dari frontend secara langsung
+    karena webhook Midtrans tidak bisa masuk ke localhost.
+    """
+    order_id = data.get("orderId")
+    if not order_id:
+        raise HTTPException(status_code=400, detail="orderId is required")
+        
+    # Update status khusus Midtrans menjadi settlement dan order jadi paid
+    await db.orders.update_one(
+        {"orderId": order_id},
+        {"$set": {
+            "payment_status": "settlement",
+            "payment_updated_at": datetime.now().isoformat(),
+        }}
+    )
+    
+    from app.controllers.order_controller import OrderController
+    order_ctrl = OrderController(db)
+    await order_ctrl.update_status(order_id, "paid")
+    
+    return {"success": True, "message": "Synced successfully"}
 
 
 @router.post("/set-method")
