@@ -40,15 +40,26 @@ async def create_menu(menu_data: dict, db = Depends(get_db)):
     return {"success": True, "data": menu_dict}
 
 @router.get("/")
-async def get_all_menus(limit: int = 30, db = Depends(get_db)):
-    """
-    Get all menus with limit (default 30)
-    """
-    cursor = db.menus.find({}).limit(limit)
+async def get_all_menus(
+    page: int = 1, 
+    limit: int = 10,  # 🔥 10 per halaman (mobile friendly!)
+    db = Depends(get_db)
+):
+    skip = (page - 1) * limit
+    cursor = db.menus.find({}).skip(skip).limit(limit)
     menus = await cursor.to_list(length=limit)
-    for menu in menus:
-        menu["_id"] = str(menu["_id"])
-    return {"success": True, "data": menus}
+    total = await db.menus.count_documents({})
+    
+    return {
+        "success": True,
+        "data": menus,
+        "pagination": {
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "totalPages": (total + limit - 1) // limit
+        }
+    }
 
 @router.get("/{menu_id}")
 async def get_menu(menu_id: str, db = Depends(get_db)):
