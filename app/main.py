@@ -24,15 +24,13 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan, redirect_slashes=False)  # ← TAMBAHKAN INI
 
 # CORS
+from fastapi.middleware.cors import CORSMiddleware
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://restoran-frontend-nu.vercel.app",
-        "https://restoran-frontend-a8qg07czt-warfails-projects.vercel.app",
-        "https://restoran-frontend-a9e4ka72l-warfails-projects.vercel.app",
-        "https://restoran-frontend-warfails-projects.vercel.app", 
-        "http://localhost:5173",
-        "http://localhost:3000",
+        "https://restoran-frontend-nu.vercel.app",  # Domain Vercel Anda
+        "http://localhost:5173",  # Untuk development lokal
     ],
     allow_credentials=True,
     allow_methods=["*"],
