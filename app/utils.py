@@ -10,6 +10,31 @@ class CustomJSONEncoder(json.JSONEncoder):
         if isinstance(obj, datetime):
             return obj.isoformat()  # Convert datetime ke string ISO format
         return super().default(obj)
+    
+    
+    # app/utils.py
+
+def format_stock(value):
+    """Format angka stok ke 2 desimal"""
+    if value is None:
+        return "0"
+    return f"{round(value, 2):.2f}".rstrip('0').rstrip('.')
+
+def convert_to_small_unit(stock, unit):
+    """Konversi stok dari besar ke kecil"""
+    conversions = {
+        "kg": {"multiplier": 1000, "small_unit": "gr"},
+        "liter": {"multiplier": 1000, "small_unit": "ml"},
+        "dus": {"multiplier": 24, "small_unit": "pcs"},
+        "karung": {"multiplier": 50, "small_unit": "kg"},
+        "ons": {"multiplier": 100, "small_unit": "gr"},
+    }
+    if unit in conversions:
+        return {
+            "value": stock * conversions[unit]["multiplier"],
+            "unit": conversions[unit]["small_unit"]
+        }
+    return {"value": stock, "unit": unit}
 
 
 def parse_json(data):
