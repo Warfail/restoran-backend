@@ -90,70 +90,126 @@ async def delete_inventory_item(item_id: str, db = Depends(get_db)):
 @router.post("/reduce")
 async def reduce_stock(data: dict, db = Depends(get_db)):
     """
-    Kurangi stok bahan berdasarkan recipe
+    Kurangi stok bahan berdasarkan recipe.
+    Optimized: uses bulk $in queries instead of sequential find_one per item/ingredient.
     """
+    import asyncio
     try:
         order_id = data.get("orderId")
-        
+
         if not order_id:
             raise HTTPException(status_code=400, detail="orderId is required")
-        
+
         logs = []
         errors = []
-        
-        # Ambil order detail
+
+        # 1. Fetch order
         order = await db.orders.find_one({"orderId": order_id})
         if not order:
             raise HTTPException(status_code=404, detail="Order not found")
-        
-        for item in order.get("items", []):
+
+        order_items = order.get("items", [])
+        if not order_items:
+            return {"success": True, "errors": [], "logs": []}
+
+        # 2. Collect all unique menuIds from the order
+        menu_ids_raw = [item.get("menuId") for item in order_items if item.get("menuId")]
+
+        # Build a $in query that handles both ObjectId and string menuId fields
+        valid_object_ids = [ObjectId(mid) for mid in menu_ids_raw if ObjectId.is_valid(mid)]
+        string_ids = menu_ids_raw  # always try by menuId string field too
+
+        # Fetch all menus in ONE query
+        menu_cursor = db.menus.find({
+            "$or": [
+                {"_id": {"$in": valid_object_ids}},
+                {"menuId": {"$in": string_ids}}
+            ]
+        })
+        all_menus = await menu_cursor.to_list(length=500)
+
+        # Build lookup dicts: by _id and by menuId string
+        menus_by_object_id = {str(m["_id"]): m for m in all_menus}
+        menus_by_menu_id = {m.get("menuId"): m for m in all_menus if m.get("menuId")}
+
+        def find_menu(menu_id):
+            if ObjectId.is_valid(menu_id) and menu_id in menus_by_object_id:
+                return menus_by_object_id[menu_id]
+            return menus_by_menu_id.get(menu_id)
+
+        # 3. Collect all ingredient names/ids needed across all menus
+        ingredient_ids_needed = set()
+        ingredient_names_needed = set()
+        for item in order_items:
+            menu = find_menu(item.get("menuId", ""))
+            if not menu:
+                continue
+            for ing in menu.get("recipe", []):
+                if ing.get("ingredientId"):
+                    ingredient_ids_needed.add(ing["ingredientId"])
+                if ing.get("name"):
+                    ingredient_names_needed.add(ing["name"])
+
+        # 4. Fetch all needed inventory items in ONE query
+        inventory_cursor = db.inventory.find({
+            "$or": [
+                {"ingredientId": {"$in": list(ingredient_ids_needed)}},
+                {"name": {"$in": list(ingredient_names_needed)}}
+            ]
+        })
+        all_inventory = await inventory_cursor.to_list(length=1000)
+
+        inv_by_ingredient_id = {inv.get("ingredientId"): inv for inv in all_inventory if inv.get("ingredientId")}
+        inv_by_name = {inv.get("name"): inv for inv in all_inventory if inv.get("name")}
+
+        def find_inventory(ingredient_id, ingredient_name):
+            return inv_by_ingredient_id.get(ingredient_id) or inv_by_name.get(ingredient_name)
+
+        # 5. Process each item and queue stock updates
+        update_tasks = []
+        log_tasks = []
+        now_str = datetime.now().isoformat()
+
+        for item in order_items:
             menu_id = item.get("menuId")
             quantity = item.get("quantity", 1)
-            
-            # Cari menu
-            menu = None
-            if ObjectId.is_valid(menu_id):
-                menu = await db.menus.find_one({"_id": ObjectId(menu_id)})
-            if not menu:
-                menu = await db.menus.find_one({"menuId": menu_id})
-            
+
+            menu = find_menu(menu_id)
             if not menu:
                 errors.append(f"Menu {menu_id} not found")
                 continue
-            
+
             recipe = menu.get("recipe", [])
             if not recipe:
                 continue
-            
-            # Untuk setiap bahan di recipe
+
             for ingredient in recipe:
                 ingredient_id = ingredient.get("ingredientId")
                 ingredient_name = ingredient.get("name")
                 ingredient_qty = ingredient.get("quantity", 0) * quantity
                 unit = ingredient.get("unit", "unit")
-                
-                # Cari inventory
-                inventory = await db.inventory.find_one({"ingredientId": ingredient_id})
-                if not inventory:
-                    inventory = await db.inventory.find_one({"name": ingredient_name})
-                
+
+                inventory = find_inventory(ingredient_id, ingredient_name)
                 if not inventory:
                     errors.append(f"Ingredient {ingredient_name} not found in inventory")
                     continue
-                
-                # Cek stok cukup?
+
                 if inventory["stock"] < ingredient_qty:
                     errors.append(f"Stok {ingredient_name} tidak cukup! Sisa: {inventory['stock']} {inventory['unit']}")
                     continue
-                
-                # Kurangi stok
+
                 new_stock = inventory["stock"] - ingredient_qty
-                await db.inventory.update_one(
-                    {"_id": inventory["_id"]},
-                    {"$set": {"stock": new_stock, "updatedAt": datetime.now().isoformat()}}
+                # Mutate local copy so subsequent iterations within same order see correct stock
+                inventory["stock"] = new_stock
+
+                # Queue the DB update (will run concurrently below)
+                update_tasks.append(
+                    db.inventory.update_one(
+                        {"_id": inventory["_id"]},
+                        {"$set": {"stock": new_stock, "updatedAt": now_str}}
+                    )
                 )
-                
-                # 🔥 PAKE SERIALIZER
+
                 log = {
                     "orderId": str(order_id),
                     "menuId": menu.get("menuId") or str(menu["_id"]),
@@ -163,17 +219,20 @@ async def reduce_stock(data: dict, db = Depends(get_db)):
                     "quantity": float(ingredient_qty),
                     "unit": str(unit),
                     "action": "used",
-                    "timestamp": datetime.now().isoformat(),
+                    "timestamp": now_str,
                     "remainingStock": float(new_stock),
                     "performedBy": "kitchen"
                 }
                 logs.append(log)
-                await db.stock_logs.insert_one(log)
-        
-        # 🔥 Serialize semua data sebelum return
+                log_tasks.append(db.stock_logs.insert_one(dict(log)))
+
+        # 6. Run all DB writes concurrently
+        if update_tasks or log_tasks:
+            await asyncio.gather(*update_tasks, *log_tasks)
+
         serialized_logs = [serialize_document(log) for log in logs]
         serialized_errors = [str(e) for e in errors]
-        
+
         return {
             "success": len(errors) == 0,
             "errors": serialized_errors,
