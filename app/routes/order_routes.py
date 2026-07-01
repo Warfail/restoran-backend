@@ -114,8 +114,6 @@ async def process_payment(payment_data: dict, db = Depends(get_db)):
     """
     Customer melakukan pembayaran berdasarkan orderId
     """
-    print("Received payment data:", payment_data)
-    
     order_id = payment_data.get("orderId")
     if not order_id:
         raise HTTPException(status_code=400, detail="orderId is required")
@@ -128,7 +126,7 @@ async def process_payment(payment_data: dict, db = Depends(get_db)):
     if order["status"] != "pending":
         raise HTTPException(status_code=400, detail=f"Order already {order['status']}")
     
-    # Update status jadi paid
+    # 🔥 1. UPDATE ORDERS
     result = await db.orders.update_one(
         {"orderId": order_id},
         {"$set": {
@@ -136,6 +134,18 @@ async def process_payment(payment_data: dict, db = Depends(get_db)):
             "paymentMethod": payment_data.get("method", "qris"),
             "updatedAt": datetime.now().isoformat()
         }}
+    )
+    
+    # 🔥 2. UPDATE PAYMENTS (SINKRON!)
+    await db.payments.update_one(
+        {"orderId": order_id},
+        {"$set": {
+            "payment_status": "paid",
+            "status": "paid",
+            "payment_method": payment_data.get("method", "qris"),
+            "updatedAt": datetime.now().isoformat()
+        }},
+        upsert=True
     )
     
     return {"success": True, "message": "Payment successful", "data": {"orderId": order_id, "status": "paid"}}
@@ -153,10 +163,22 @@ async def confirm_payment(order_id: str, db = Depends(get_db)):
     if order["status"] != "pending":
         raise HTTPException(status_code=400, detail=f"Order already {order['status']}")
     
-    # Update status
+    # 🔥 1. UPDATE ORDERS
     result = await db.orders.update_one(
         {"orderId": order_id},
         {"$set": {"status": "paid", "updatedAt": datetime.now().isoformat()}}
+    )
+    
+    # 🔥 2. UPDATE PAYMENTS (SINKRON!)
+    await db.payments.update_one(
+        {"orderId": order_id},
+        {"$set": {
+            "payment_status": "paid",
+            "status": "paid",
+            "payment_method": "cash",
+            "updatedAt": datetime.now().isoformat()
+        }},
+        upsert=True  # Bikin dokumen baru kalo belum ada
     )
     
     if result.modified_count == 0:

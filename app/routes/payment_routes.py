@@ -132,7 +132,7 @@ async def payment_webhook(request: Request, db=Depends(get_db)):
     
     # Update database berdasarkan status
     if transaction_status == "settlement":
-        # ✅ Pembayaran berhasil!
+        # 🔥 Update orders
         await db.orders.update_one(
             {"orderId": order_id},
             {"$set": {
@@ -141,7 +141,20 @@ async def payment_webhook(request: Request, db=Depends(get_db)):
                 "midtrans_response": payload
             }}
         )
+        
+        # 🔥 Update payments (SINKRON!)
+        await db.payments.update_one(
+            {"orderId": order_id},
+            {"$set": {
+                "payment_status": "paid",
+                "status": "paid",
+                "updatedAt": datetime.now(),
+                "midtrans_response": payload
+            }},
+            upsert=True
+        )
         print(f"✅ Payment SUCCESS for order {order_id}")
+
         
     elif transaction_status == "pending":
         # ⏳ Menunggu pembayaran
@@ -182,24 +195,20 @@ async def payment_webhook(request: Request, db=Depends(get_db)):
     # Selalu return 200 ke Midtrans
     return {"status": "ok"}
 
-# ✅ LOCAL-SUCCESS ENDPOINT - HARUS DI LUAR FUNGSI WEBHOOK!
+# ✅ LOCAL-SUCCESS ENDPOINT
 @router.post("/local-success")
 async def local_payment_success(data: dict, db=Depends(get_db)):
-    """
-    Endpoint buat sync pembayaran dari frontend (fallback jika webhook lambat)
-    """
     order_id = data.get("orderId")
     
     if not order_id:
         raise HTTPException(status_code=400, detail="orderId is required")
     
-    # Cek apakah order ada
     order = await db.orders.find_one({"orderId": order_id})
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
     
-    # Update status jadi paid (kalo masih pending)
     if order.get("payment_status") != "paid":
+        # 🔥 Update orders
         await db.orders.update_one(
             {"orderId": order_id},
             {"$set": {
@@ -208,6 +217,19 @@ async def local_payment_success(data: dict, db=Depends(get_db)):
                 "midtrans_response": {"source": "local-success-fallback"}
             }}
         )
+        
+        # 🔥 Update payments (SINKRON!)
+        await db.payments.update_one(
+            {"orderId": order_id},
+            {"$set": {
+                "payment_status": "paid",
+                "status": "paid",
+                "updatedAt": datetime.now(),
+                "midtrans_response": {"source": "local-success-fallback"}
+            }},
+            upsert=True
+        )
+        
         print(f"✅ Local success: Order {order_id} updated to paid")
     else:
         print(f"ℹ️ Local success: Order {order_id} already paid")
