@@ -159,3 +159,53 @@ async def delete_menu(menu_id: str, db = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Menu not found")
     
     return {"success": True, "message": "Menu deleted"}
+
+@router.get("/")
+async def get_all_menus(
+    page: int = 1, 
+    limit: int = 10,
+    category: str = None,  # 🔥 TAMBAHKAN PARAMETER CATEGORY
+    db = Depends(get_db)
+):
+    try:
+        if page < 1:
+            page = 1
+        if limit < 1 or limit > 50:
+            limit = 10
+
+        skip = (page - 1) * limit
+        
+        # 🔥 FILTER KATEGORI
+        filter_query = {}
+        if category and category != "Semua":
+            filter_query["category"] = category
+        
+        cursor = db.menus.find(
+            filter_query,
+            {
+                "_id": 1,
+                "name": 1,
+                "price": 1,
+                "category": 1,
+                "image": 1,
+                "stock": 1,
+                "isAvailable": 1
+            }
+        ).skip(skip).limit(limit)
+        
+        menus = await cursor.to_list(length=limit)
+        total = await db.menus.count_documents(filter_query)  # 🔥 TOTAL SESUAI FILTER
+        
+        return {
+            "success": True,
+            "data": parse_json(menus),
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total": total,
+                "totalPages": (total + limit - 1) // limit if total > 0 else 1
+            }
+        }
+    except Exception as e:
+        print(f"Error in get_all_menus: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")

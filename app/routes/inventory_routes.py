@@ -92,6 +92,7 @@ async def reduce_stock(data: dict, db = Depends(get_db)):
     """
     Kurangi stok bahan berdasarkan recipe.
     Optimized: uses bulk $in queries instead of sequential find_one per item/ingredient.
+    + Auto-disable menu jika bahan habis
     """
     import asyncio
     try:
@@ -102,6 +103,7 @@ async def reduce_stock(data: dict, db = Depends(get_db)):
 
         logs = []
         errors = []
+        disabled_menus = []  # 🔥 TAMBAHKAN
 
         # 1. Fetch order
         order = await db.orders.find_one({"orderId": order_id})
@@ -110,16 +112,14 @@ async def reduce_stock(data: dict, db = Depends(get_db)):
 
         order_items = order.get("items", [])
         if not order_items:
-            return {"success": True, "errors": [], "logs": []}
+            return {"success": True, "errors": [], "logs": [], "disabled_menus": []}
 
         # 2. Collect all unique menuIds from the order
         menu_ids_raw = [item.get("menuId") for item in order_items if item.get("menuId")]
 
-        # Build a $in query that handles both ObjectId and string menuId fields
         valid_object_ids = [ObjectId(mid) for mid in menu_ids_raw if ObjectId.is_valid(mid)]
-        string_ids = menu_ids_raw  # always try by menuId string field too
+        string_ids = menu_ids_raw
 
-        # Fetch all menus in ONE query
         menu_cursor = db.menus.find({
             "$or": [
                 {"_id": {"$in": valid_object_ids}},
@@ -128,7 +128,6 @@ async def reduce_stock(data: dict, db = Depends(get_db)):
         })
         all_menus = await menu_cursor.to_list(length=500)
 
-        # Build lookup dicts: by _id and by menuId string
         menus_by_object_id = {str(m["_id"]): m for m in all_menus}
         menus_by_menu_id = {m.get("menuId"): m for m in all_menus if m.get("menuId")}
 
@@ -199,10 +198,8 @@ async def reduce_stock(data: dict, db = Depends(get_db)):
                     continue
 
                 new_stock = inventory["stock"] - ingredient_qty
-                # Mutate local copy so subsequent iterations within same order see correct stock
                 inventory["stock"] = new_stock
 
-                # Queue the DB update (will run concurrently below)
                 update_tasks.append(
                     db.inventory.update_one(
                         {"_id": inventory["_id"]},
@@ -230,13 +227,35 @@ async def reduce_stock(data: dict, db = Depends(get_db)):
         if update_tasks or log_tasks:
             await asyncio.gather(*update_tasks, *log_tasks)
 
+        # 🔥 7. DISABLE MENU KALO BAHAN HABIS
+        for inv in all_inventory:
+            # Ambil stok terbaru dari database (setelah update)
+            updated_inv = await db.inventory.find_one({"_id": inv["_id"]})
+            if updated_inv and updated_inv.get("stock", 0) <= 0:
+                # Cari semua menu yang pake bahan ini
+                menus_with_ingredient = await db.menus.find({
+                    "$or": [
+                        {"recipe.ingredientId": inv.get("ingredientId")},
+                        {"recipe.name": inv.get("name")}
+                    ]
+                }).to_list(length=100)
+                
+                for menu in menus_with_ingredient:
+                    if menu.get("isAvailable") != False:  # Kalo masih aktif
+                        await db.menus.update_one(
+                            {"_id": menu["_id"]},
+                            {"$set": {"isAvailable": False, "updatedAt": datetime.now()}}
+                        )
+                        disabled_menus.append(menu.get("name"))
+
         serialized_logs = [serialize_document(log) for log in logs]
         serialized_errors = [str(e) for e in errors]
 
         return {
             "success": len(errors) == 0,
             "errors": serialized_errors,
-            "logs": serialized_logs
+            "logs": serialized_logs,
+            "disabled_menus": list(set(disabled_menus))  # 🔥 UNIQUE LIST
         }
     except Exception as e:
         print(f"Error in reduce_stock: {str(e)}")
