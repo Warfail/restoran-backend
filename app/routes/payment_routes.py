@@ -72,6 +72,7 @@ async def create_transaction(order_data: dict, db=Depends(get_db)):
                 "midtrans_token": token,
                 "midtrans_redirect_url": redirect_url,
                 "payment_status": "pending",
+                "redirect_after_payment": f"/order-status?orderId={order_id}"
             }}
         )
         
@@ -79,6 +80,7 @@ async def create_transaction(order_data: dict, db=Depends(get_db)):
             "success": True,
             "token": token,
             "redirect_url": redirect_url,
+            "order_id": order_id,
         }
     except Exception as e:
         print("Midtrans Error:", str(e))
