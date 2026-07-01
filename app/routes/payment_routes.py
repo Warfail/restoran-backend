@@ -10,11 +10,10 @@ router = APIRouter(prefix="/payment", tags=["Payment"])
 
 # Init Midtrans Snap client
 snap = midtransclient.Snap(
-    is_production=False,
-    server_key="SB-Mid-server-94azUp2s8HQkBM8J6ikDt20n",
-    client_key="SB-Mid-client-6w4YedY_zGZb8guz",
+    is_production=os.getenv("MIDTRANS_IS_PRODUCTION", "false").lower() == "true",
+    server_key=os.getenv("MIDTRANS_SERVER_KEY"),
+    client_key=os.getenv("MIDTRANS_CLIENT_KEY"),
 )
-
 @router.post("/create-transaction")
 async def create_transaction(order_data: dict, db=Depends(get_db)):
     """
