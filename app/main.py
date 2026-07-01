@@ -30,6 +30,7 @@ app.add_middleware(
         "https://restoran-frontend-nu.vercel.app",
         "https://restoran-frontend-a8qg07czt-warfails-projects.vercel.app",
         "https://restoran-frontend-a9e4ka72l-warfails-projects.vercel.app",
+        "https://restoran-frontend-warfails-projects.vercel.app", 
         "http://localhost:5173",
         "http://localhost:3000",
     ],
