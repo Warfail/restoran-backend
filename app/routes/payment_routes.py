@@ -5,9 +5,10 @@ import os
 import hashlib
 import uuid
 from app.config.database import get_db
+from app.controllers.order_controller import OrderController
 
 # Tambahkan di awal file, setelah import
-FRONTEND_URL = os.getenv("FRONTEND_URL", "https://restoran-frontend-nu.vercel.app/")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://restoran-frontend-nu.vercel.app/").rstrip("/")
 
 router = APIRouter(prefix="/payment", tags=["Payment"])
 
@@ -61,10 +62,11 @@ async def create_transaction(order_data: dict, db=Depends(get_db)):
             "gopay",
             "qris",
         ],
-        "finish_redirect_url": f"{FRONTEND_URL}/order-status?orderId={order_id}",
-        "unfinish_redirect_url": f"{FRONTEND_URL}/order-status?orderId={order_id}",
-        "error_redirect_url": f"{FRONTEND_URL}/order-status?orderId={order_id}",
-        "redirect_url": f"{FRONTEND_URL}/order-status?orderId={order_id}", 
+        "callbacks": {
+            "finish": f"{FRONTEND_URL}/order-status?orderId={order_id}",
+            "unfinish": f"{FRONTEND_URL}/order-status?orderId={order_id}",
+            "error": f"{FRONTEND_URL}/order-status?orderId={order_id}"
+        }
     }
     
     try:
@@ -131,7 +133,26 @@ async def payment_webhook(request: Request, db=Depends(get_db)):
     print(f"📦 Order: {order_id}, Status: {transaction_status}")
     
     # Update database berdasarkan status
+    is_success = False
     if transaction_status == "settlement":
+        is_success = True
+    elif transaction_status == "capture":
+        if fraud_status == "accept" or not fraud_status:
+            is_success = True
+
+    if is_success:
+        # 🔥 Update orders via OrderController to handle inventory/menu stock and status transition
+        from app.controllers.order_controller import OrderController
+        controller = OrderController(db)
+        try:
+            await controller.update_status(order_id, "paid")
+        except Exception as e:
+            print(f"⚠️ Error updating status via controller for order {order_id}: {e}")
+            await db.orders.update_one(
+                {"orderId": order_id},
+                {"$set": {"status": "paid", "updatedAt": datetime.now().isoformat()}}
+            )
+
         # 🔥 Update orders
         await db.orders.update_one(
             {"orderId": order_id},
@@ -208,6 +229,18 @@ async def local_payment_success(data: dict, db=Depends(get_db)):
         raise HTTPException(status_code=404, detail="Order not found")
     
     if order.get("payment_status") != "paid":
+        # 🔥 Update orders via OrderController to handle inventory/menu stock and status transition
+        from app.controllers.order_controller import OrderController
+        controller = OrderController(db)
+        try:
+            await controller.update_status(order_id, "paid")
+        except Exception as e:
+            print(f"⚠️ Error updating status via controller in local-success for order {order_id}: {e}")
+            await db.orders.update_one(
+                {"orderId": order_id},
+                {"$set": {"status": "paid", "updatedAt": datetime.now().isoformat()}}
+            )
+
         # 🔥 Update orders
         await db.orders.update_one(
             {"orderId": order_id},
