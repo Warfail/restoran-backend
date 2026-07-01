@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from datetime import datetime
 import midtransclient
 import os
@@ -14,6 +14,7 @@ snap = midtransclient.Snap(
     server_key=os.getenv("MIDTRANS_SERVER_KEY"),
     client_key=os.getenv("MIDTRANS_CLIENT_KEY"),
 )
+
 @router.post("/create-transaction")
 async def create_transaction(order_data: dict, db=Depends(get_db)):
     """
@@ -82,3 +83,92 @@ async def create_transaction(order_data: dict, db=Depends(get_db)):
     except Exception as e:
         print("Midtrans Error:", str(e))
         raise HTTPException(status_code=500, detail=f"Payment gateway error: {str(e)}")
+
+# ✅ WEBHOOK ENDPOINT - Harus di luar fungsi create_transaction!
+@router.post("/webhook")
+async def payment_webhook(request: Request, db=Depends(get_db)):
+    """
+    Endpoint buat terima notifikasi dari Midtrans
+    """
+    # Ambil raw body
+    payload = await request.json()
+    
+    # Log payload buat debugging
+    print("Webhook received:", payload)
+    
+    # 1. VERIFIKASI SIGNATURE (keamanan!)
+    order_id = payload.get("order_id")
+    status_code = payload.get("status_code")
+    gross_amount = payload.get("gross_amount")
+    signature_key = payload.get("signature_key")
+    
+    # Dapatkan server_key dari environment
+    server_key = os.getenv("MIDTRANS_SERVER_KEY")
+    
+    # Buat signature yang diharapkan
+    expected_signature = hashlib.sha512(
+        f"{order_id}{status_code}{gross_amount}{server_key}".encode()
+    ).hexdigest()
+    
+    # Bandingkan dengan signature dari Midtrans
+    if signature_key != expected_signature:
+        print("❌ Invalid signature!")
+        raise HTTPException(status_code=403, detail="Invalid signature")
+    
+    # 2. PROSES STATUS
+    transaction_status = payload.get("transaction_status")
+    fraud_status = payload.get("fraud_status")
+    
+    print(f"📦 Order: {order_id}, Status: {transaction_status}")
+    
+    # Update database berdasarkan status
+    if transaction_status == "settlement":
+        # ✅ Pembayaran berhasil!
+        await db.orders.update_one(
+            {"orderId": order_id},
+            {"$set": {
+                "payment_status": "paid",
+                "payment_updated_at": datetime.now(),
+                "midtrans_response": payload
+            }}
+        )
+        print(f"✅ Payment SUCCESS for order {order_id}")
+        
+    elif transaction_status == "pending":
+        # ⏳ Menunggu pembayaran
+        await db.orders.update_one(
+            {"orderId": order_id},
+            {"$set": {
+                "payment_status": "pending",
+                "payment_updated_at": datetime.now(),
+                "midtrans_response": payload
+            }}
+        )
+        print(f"⏳ Payment PENDING for order {order_id}")
+        
+    elif transaction_status == "expire":
+        # ⏰ Kadaluarsa
+        await db.orders.update_one(
+            {"orderId": order_id},
+            {"$set": {
+                "payment_status": "expired",
+                "payment_updated_at": datetime.now(),
+                "midtrans_response": payload
+            }}
+        )
+        print(f"⏰ Payment EXPIRED for order {order_id}")
+        
+    elif transaction_status == "cancel":
+        # ❌ Dibatalkan
+        await db.orders.update_one(
+            {"orderId": order_id},
+            {"$set": {
+                "payment_status": "cancelled",
+                "payment_updated_at": datetime.now(),
+                "midtrans_response": payload
+            }}
+        )
+        print(f"❌ Payment CANCELLED for order {order_id}")
+    
+    # Selalu return 200 ke Midtrans
+    return {"status": "ok"}
