@@ -61,9 +61,10 @@ async def create_transaction(order_data: dict, db=Depends(get_db)):
             "gopay",
             "qris",
         ],
-         "finish_redirect_url": f"{FRONTEND_URL}/order-status?orderId={order_id}",
-    "unfinish_redirect_url": f"{FRONTEND_URL}/order-status?orderId={order_id}",
-    "error_redirect_url": f"{FRONTEND_URL}/order-status?orderId={order_id}"
+        "finish_redirect_url": f"{FRONTEND_URL}/order-status?orderId={order_id}",
+        "unfinish_redirect_url": f"{FRONTEND_URL}/order-status?orderId={order_id}",
+        "error_redirect_url": f"{FRONTEND_URL}/order-status?orderId={order_id}",
+        "redirect_url": f"{FRONTEND_URL}/order-status?orderId={order_id}", 
     }
     
     try:
@@ -92,7 +93,7 @@ async def create_transaction(order_data: dict, db=Depends(get_db)):
         print("Midtrans Error:", str(e))
         raise HTTPException(status_code=500, detail=f"Payment gateway error: {str(e)}")
 
-# ✅ WEBHOOK ENDPOINT - Harus di luar fungsi create_transaction!
+# ✅ WEBHOOK ENDPOINT
 @router.post("/webhook")
 async def payment_webhook(request: Request, db=Depends(get_db)):
     """
@@ -180,3 +181,35 @@ async def payment_webhook(request: Request, db=Depends(get_db)):
     
     # Selalu return 200 ke Midtrans
     return {"status": "ok"}
+
+# ✅ LOCAL-SUCCESS ENDPOINT - HARUS DI LUAR FUNGSI WEBHOOK!
+@router.post("/local-success")
+async def local_payment_success(data: dict, db=Depends(get_db)):
+    """
+    Endpoint buat sync pembayaran dari frontend (fallback jika webhook lambat)
+    """
+    order_id = data.get("orderId")
+    
+    if not order_id:
+        raise HTTPException(status_code=400, detail="orderId is required")
+    
+    # Cek apakah order ada
+    order = await db.orders.find_one({"orderId": order_id})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    # Update status jadi paid (kalo masih pending)
+    if order.get("payment_status") != "paid":
+        await db.orders.update_one(
+            {"orderId": order_id},
+            {"$set": {
+                "payment_status": "paid",
+                "payment_updated_at": datetime.now(),
+                "midtrans_response": {"source": "local-success-fallback"}
+            }}
+        )
+        print(f"✅ Local success: Order {order_id} updated to paid")
+    else:
+        print(f"ℹ️ Local success: Order {order_id} already paid")
+    
+    return {"success": True, "order_id": order_id}
