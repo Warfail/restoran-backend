@@ -27,7 +27,7 @@ async def create_menu(menu_data: dict, db = Depends(get_db)):
         "description": str(menu_data.get("description", "")),
         "isAvailable": bool(menu_data.get("isAvailable", True)),
         "image": str(menu_data.get("image", "https://placehold.co/100x80/c8a96e/c8a96e")),
-         "recipe": menu_data.get("recipe", []),
+        "recipe": menu_data.get("recipe", []),
         "createdAt": datetime.now(),
         "updatedAt": datetime.now()
     }
@@ -40,47 +40,59 @@ async def create_menu(menu_data: dict, db = Depends(get_db)):
     return {"success": True, "data": menu_dict}
 
 @router.get("/")
-async def get_all_menus(db = Depends(get_db)):
-    cursor = db.menus.find({})
-    menus = await cursor.to_list(length=100)
+async def get_all_menus(limit: int = 30, db = Depends(get_db)):
+    """
+    Get all menus with limit (default 30)
+    """
+    cursor = db.menus.find({}).limit(limit)
+    menus = await cursor.to_list(length=limit)
     for menu in menus:
         menu["_id"] = str(menu["_id"])
     return {"success": True, "data": menus}
 
 @router.get("/{menu_id}")
 async def get_menu(menu_id: str, db = Depends(get_db)):
-    if not ObjectId.is_valid(menu_id):
-        raise HTTPException(status_code=400, detail="Invalid menu ID")
+    # Coba cari berdasarkan menuId dulu
+    menu = await db.menus.find_one({"menuId": menu_id})
+    if not menu:
+        # Kalo ga ketemu, coba sebagai ObjectId
+        try:
+            menu = await db.menus.find_one({"_id": ObjectId(menu_id)})
+        except:
+            pass
     
-    menu = await db.menus.find_one({"_id": ObjectId(menu_id)})
     if not menu:
         raise HTTPException(status_code=404, detail="Menu not found")
+    
     menu["_id"] = str(menu["_id"])
     return {"success": True, "data": menu}
 
 @router.put("/{menu_id}")
 async def update_menu(menu_id: str, menu_data: dict, db = Depends(get_db)):
-    if not ObjectId.is_valid(menu_id):
-        raise HTTPException(status_code=400, detail="Invalid menu ID")
-    
-    # Konversi price dan stock ke int
-    if "price" in menu_data:
+    # Coba cari berdasarkan menuId dulu
+    query = {"menuId": menu_id}
+    menu = await db.menus.find_one(query)
+    if not menu:
         try:
-            menu_data["price"] = int(menu_data["price"])
+            query = {"_id": ObjectId(menu_id)}
+            menu = await db.menus.find_one(query)
         except:
-            menu_data["price"] = 0
+            pass
     
-    if "stock" in menu_data:
-        try:
-            menu_data["stock"] = int(menu_data["stock"])
-        except:
-            menu_data["stock"] = 0
+    if not menu:
+        raise HTTPException(status_code=404, detail="Menu not found")
     
+    # 🔥 HAPUS field yang ga boleh di-update
     menu_data.pop("_id", None)
+    menu_data.pop("menuId", None)
+    menu_data.pop("createdAt", None)
+    
+    # 🔥 Tambah updatedAt
     menu_data["updatedAt"] = datetime.now()
     
+    # 🔥 UPDATE!
     result = await db.menus.update_one(
-        {"_id": ObjectId(menu_id)},
+        query,
         {"$set": menu_data}
     )
     
@@ -91,10 +103,20 @@ async def update_menu(menu_id: str, menu_data: dict, db = Depends(get_db)):
 
 @router.delete("/{menu_id}")
 async def delete_menu(menu_id: str, db = Depends(get_db)):
-    if not ObjectId.is_valid(menu_id):
-        raise HTTPException(status_code=400, detail="Invalid menu ID")
+    # Coba cari berdasarkan menuId dulu
+    query = {"menuId": menu_id}
+    menu = await db.menus.find_one(query)
+    if not menu:
+        try:
+            query = {"_id": ObjectId(menu_id)}
+            menu = await db.menus.find_one(query)
+        except:
+            pass
     
-    result = await db.menus.delete_one({"_id": ObjectId(menu_id)})
+    if not menu:
+        raise HTTPException(status_code=404, detail="Menu not found")
+    
+    result = await db.menus.delete_one(query)
     
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Menu not found")
