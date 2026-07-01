@@ -29,8 +29,12 @@ from fastapi.middleware.cors import CORSMiddleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://restoran-frontend-nu.vercel.app",  # Domain Vercel Anda
+        "https://restoran-frontend-nu.vercel.app",  # Domain Vercel
         "http://localhost:5173",  # Untuk development lokal
+        "https://restoran-frontend-warfails-projects.vercel.app",
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "*"  # BUAT TESTING
     ],
     allow_credentials=True,
     allow_methods=["*"],
