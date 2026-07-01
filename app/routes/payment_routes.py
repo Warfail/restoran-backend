@@ -6,6 +6,9 @@ import hashlib
 import uuid
 from app.config.database import get_db
 
+# Tambahkan di awal file, setelah import
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://restoran-frontend-nu.vercel.app/")
+
 router = APIRouter(prefix="/payment", tags=["Payment"])
 
 # Init Midtrans Snap client
@@ -58,6 +61,9 @@ async def create_transaction(order_data: dict, db=Depends(get_db)):
             "gopay",
             "qris",
         ],
+         "finish_redirect_url": f"{FRONTEND_URL}/order-status?orderId={order_id}",
+    "unfinish_redirect_url": f"{FRONTEND_URL}/order-status?orderId={order_id}",
+    "error_redirect_url": f"{FRONTEND_URL}/order-status?orderId={order_id}"
     }
     
     try:
