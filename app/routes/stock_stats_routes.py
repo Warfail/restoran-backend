@@ -8,13 +8,13 @@ from fastapi.responses import StreamingResponse
 
 router = APIRouter(prefix="/stock-stats", tags=["Stock Stats"])
 
-@router.get("/daily-by-category")
-async def get_daily_stock_stats_by_category(
+@router.get("/daily-flat")
+async def get_daily_stock_stats_flat(
     date: str = None,
     db = Depends(get_db)
 ):
     """
-    Get daily stock usage grouped by menu category
+    Get daily stock usage as flat list (not grouped by category)
     """
     try:
         # TENTUKAN TANGGAL
@@ -34,11 +34,11 @@ async def get_daily_stock_stats_by_category(
             }
         }).to_list(length=1000)
         
-        # 🔥 AMBIL DATA MENU UNTUK KATEGORI
+        # AMBIL DATA MENU UNTUK KATEGORI
         menus = await db.menus.find({}, { "name": 1, "category": 1 }).to_list(length=100)
         menu_category_map = { m["name"]: m.get("category", "Makanan") for m in menus }
         
-        # 🔥 GROUP BY KATEGORI + BAHAN
+        # GROUP BY BAHAN (FLAT)
         stats = {}
         for log in logs:
             menu_name = log.get("menuName") or "Unknown"
@@ -50,40 +50,25 @@ async def get_daily_stock_stats_by_category(
             if not ingredient:
                 continue
             
-            if category not in stats:
-                stats[category] = {}
-            
-            if ingredient not in stats[category]:
-                stats[category][ingredient] = {
+            if ingredient not in stats:
+                stats[ingredient] = {
+                    "name": ingredient,
                     "total": 0,
                     "unit": unit,
+                    "category": category,
                     "menus": []
                 }
             
-            stats[category][ingredient]["total"] += qty
-            if menu_name not in stats[category][ingredient]["menus"]:
-                stats[category][ingredient]["menus"].append(menu_name)
+            stats[ingredient]["total"] += qty
+            if menu_name not in stats[ingredient]["menus"]:
+                stats[ingredient]["menus"].append(menu_name)
         
-        # 🔥 FORMAT OUTPUT
-        result = []
-        for category, ingredients in stats.items():
-            ingredient_list = []
-            for name, data in ingredients.items():
-                ingredient_list.append({
-                    "name": name,
-                    "total": round(data["total"], 2),
-                    "unit": data["unit"],
-                    "menus": data["menus"]
-                })
-            ingredient_list.sort(key=lambda x: x["total"], reverse=True)
-            result.append({
-                "category": category,
-                "ingredients": ingredient_list
-            })
+        # FORMAT OUTPUT
+        result = list(stats.values())
+        for item in result:
+            item["total"] = round(item["total"], 2)
         
-        # SORT KATEGORI: Makanan, Snack, Minuman
-        category_order = ["Makanan", "Snack", "Minuman"]
-        result.sort(key=lambda x: category_order.index(x["category"]) if x["category"] in category_order else 99)
+        result.sort(key=lambda x: x["total"], reverse=True)
         
         return {
             "success": True,
@@ -92,5 +77,54 @@ async def get_daily_stock_stats_by_category(
             "total_logs": len(logs)
         }
     except Exception as e:
-        print(f"Error in get_daily_stock_stats_by_category: {e}")
+        print(f"Error in get_daily_stock_stats_flat: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/export/daily-csv")
+async def export_daily_csv(
+    date: str = None,
+    db = Depends(get_db)
+):
+    """
+    Export daily stock usage as CSV
+    """
+    try:
+        # DAPATKAN DATA
+        stats_response = await get_daily_stock_stats_flat(date, db)
+        if not stats_response.get("success"):
+            raise HTTPException(status_code=500, detail="Failed to get stats")
+        
+        data = stats_response.get("data", [])
+        date_str = stats_response.get("date", datetime.now().isoformat())
+        
+        # BUAT CSV
+        output = StringIO()
+        writer = csv.writer(output)
+        
+        # HEADER
+        writer.writerow(["Bahan", "Total Terpakai", "Unit", "Kategori", "Menu Terkait"])
+        
+        # DATA
+        for item in data:
+            writer.writerow([
+                item["name"],
+                item["total"],
+                item["unit"],
+                item["category"],
+                ", ".join(item["menus"])
+            ])
+        
+        # FOOTER
+        writer.writerow([])
+        writer.writerow(["Total Bahan Terpakai", len(data)])
+        
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": f"attachment; filename=stock-usage-{date_str[:10]}.csv"
+            }
+        )
+    except Exception as e:
+        print(f"Error in export_daily_csv: {e}")
         raise HTTPException(status_code=500, detail=str(e))
