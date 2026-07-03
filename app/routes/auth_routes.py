@@ -52,9 +52,12 @@ async def forgot_password(data: dict, db = Depends(get_db)):
     )
     
     from app.utils.email_service import send_reset_email
+    import os
+    
+    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
     
     # Kirim email (jika SMTP diatur) atau sekadar print di terminal
-    reset_link = f"http://localhost:5173/reset-password?token={reset_token}"
+    reset_link = f"{frontend_url}/reset-password?token={reset_token}"
     email_sent = send_reset_email(email, reset_link)
     
     if not email_sent:
