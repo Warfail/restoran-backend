@@ -140,29 +140,19 @@ async def payment_webhook(request: Request, db=Depends(get_db)):
             is_success = True
 
     if is_success:
-        # # 🔥 Update orders via OrderController to handle inventory/menu stock and status transition
-        # from app.controllers.order_controller import OrderController
-        # controller = OrderController(db)
-        # try:
-        #     await controller.update_status(order_id, "paid")
-        # except Exception as e:
-        #     print(f"⚠️ Error updating status via controller for order {order_id}: {e}")
-        #     await db.orders.update_one(
-        #         {"orderId": order_id},
-        #         {"$set": {"status": "paid", "updatedAt": datetime.now().isoformat()}}
-        #     )
-
-        # 🔥 Update orders
+        # 🔥 UPDATE ORDERS (LANGSUNG, GA PAKE CONTROLLER!)
         await db.orders.update_one(
             {"orderId": order_id},
             {"$set": {
+                "status": "paid",
                 "payment_status": "paid",
                 "payment_updated_at": datetime.now(),
-                "midtrans_response": payload
+                "midtrans_response": payload,
+                "updatedAt": datetime.now().isoformat()
             }}
         )
         
-        # 🔥 Update payments (SINKRON!)
+        # 🔥 UPDATE PAYMENTS (SINKRON!)
         await db.payments.update_one(
             {"orderId": order_id},
             {"$set": {
@@ -174,7 +164,6 @@ async def payment_webhook(request: Request, db=Depends(get_db)):
             upsert=True
         )
         print(f"✅ Payment SUCCESS for order {order_id}")
-
         
     elif transaction_status == "pending":
         # ⏳ Menunggu pembayaran
@@ -213,11 +202,7 @@ async def payment_webhook(request: Request, db=Depends(get_db)):
         print(f"❌ Payment CANCELLED for order {order_id}")
     
     # Selalu return 200 ke Midtrans
-    return {"status": "ok"}
-
-# ✅ LOCAL-SUCCESS ENDPOINT
-# ✅ LOCAL-SUCCESS ENDPOINT
-@router.post("/local-success")
+    return {"status": "ok"}@router.post("/local-success")
 async def local_payment_success(data: dict, db=Depends(get_db)):
     order_id = data.get("orderId")
     
