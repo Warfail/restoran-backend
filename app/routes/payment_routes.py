@@ -59,8 +59,8 @@ async def create_transaction(order_data: dict, db=Depends(get_db)):
             "bank_transfer_bni",
             "bank_transfer_bri",
             "bank_transfer_permata",
-            "gopay",
-            "qris",
+            # "gopay",
+            # "qris",
         ],
         "callbacks": {
             "finish": f"{FRONTEND_URL}/order-status?orderId={order_id}",
