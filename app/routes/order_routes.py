@@ -35,7 +35,7 @@ async def create_order(order_data: dict, db = Depends(get_db)):
             # Cari menu di database
             from bson.errors import InvalidId
             try:
-                query = {"_id": ObjectId(menu_id)}
+                query = {"$or": [{"_id": ObjectId(menu_id)}, {"menuId": menu_id}]}
             except InvalidId:
                 query = {"$or": [{"menuId": menu_id}, {"kode": menu_id}, {"_id": menu_id}]}
                 
