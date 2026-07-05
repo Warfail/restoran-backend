@@ -77,17 +77,36 @@ async def get_order_detail(
 @router.put("/order/{order_id}/confirm")
 async def confirm_order(
     order_id: str,
-    controller: OrderController = Depends(get_order_controller)
+    db = Depends(get_db)
 ):
-    """Kasir mengkonfirmasi pesanan (stok berkurang)"""
-    try:
-        order = await controller.confirm_order(order_id)
-        if not order:
-            raise HTTPException(status_code=404, detail="Order not found")
-        return {"success": True, "data": parse_json(order)}
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
+    """Kasir mengkonfirmasi pesanan"""
+    # Cek order
+    order = await db.orders.find_one({"orderId": order_id})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    # Update status
+    await db.orders.update_one(
+        {"orderId": order_id},
+        {"$set": {
+            "status": "paid",
+            "payment_status": "paid",
+            "updatedAt": datetime.now().isoformat()
+        }}
+    )
+    
+    # Update payments
+    await db.payments.update_one(
+        {"orderId": order_id},
+        {"$set": {
+            "status": "paid",
+            "payment_status": "paid",
+            "updatedAt": datetime.now().isoformat()
+        }},
+        upsert=True
+    )
+    
+    return {"success": True, "message": "Payment confirmed"}
 
 @router.put("/order/{order_id}/status")
 async def update_order_status(
