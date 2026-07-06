@@ -51,7 +51,7 @@ async def get_all_menus(
         # Validasi parameter
         if page < 1:
             page = 1
-        if limit < 1 or limit > 50:
+        if limit < 1 or limit > 1000:
             limit = 10
 
         skip = (page - 1) * limit
