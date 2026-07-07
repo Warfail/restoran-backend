@@ -55,25 +55,20 @@ async def forgot_password(data: dict, db = Depends(get_db)):
         }}
     )
     
-    # 🔥 KIRIM VIA WHATSAPP (bukan email)
+    # 🔥 KIRIM VIA EMAIL
     frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
     reset_link = f"{frontend_url}/reset-password?token={reset_token}"
     
-    # Ambil nomor HP dari database
-    phone_number = user.get("phone", "").strip()
-    if phone_number:
-        from app.utils.whatsapp_service import send_reset_whatsapp
-        whatsapp_sent = send_reset_whatsapp(phone_number, reset_link)
-        if not whatsapp_sent:
-            print("=" * 50)
-            print(f"⚠️ SIMULASI WHATSAPP TERKIRIM KE: {phone_number}")
-            print(f"🔗 LINK RESET: {reset_link}")
-            print("=" * 50)
-    else:
-        print("⚠️ User tidak punya nomor HP. Kirim simulasi ke console.")
-        print(f"🔗 LINK RESET: {reset_link}")
+    from app.utils.email_service import send_reset_email
+    email_sent = send_reset_email(email, reset_link)
     
-    return {"success": True, "message": "Tautan reset telah dikirim ke WhatsApp Anda."}
+    if not email_sent:
+        print("=" * 50)
+        print(f"⚠️ SIMULASI EMAIL TERKIRIM KE: {email}")
+        print(f"🔗 LINK RESET: {reset_link}")
+        print("=" * 50)
+    
+    return {"success": True, "message": "Tautan reset telah dikirim ke email Anda."}
 @router.post("/reset-password")
 async def reset_password(data: dict, db = Depends(get_db)):
     token = data.get("token")

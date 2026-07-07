@@ -241,18 +241,4 @@ async def local_payment_success(data: dict, db=Depends(get_db)):
     else:
         print(f"ℹ️ Local success: Order {order_id} already paid")
     
-    return {"success": True, "order_id": order_id}
-            {"$set": {
-                "payment_status": "paid",
-                "status": "paid",
-                "updatedAt": datetime.now(),
-                "midtrans_response": {"source": "local-success-fallback"}
-            }},
-            upsert=True
-        )
-        
-        print(f"✅ Local success: Order {order_id} updated to paid")
-    else:
-        print(f"ℹ️ Local success: Order {order_id} already paid")
-    
-    return {"success": True, "order_id": order_id}
+    return {"success": True, "order_id": order_id}
