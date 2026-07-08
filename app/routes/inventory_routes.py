@@ -9,7 +9,7 @@ router = APIRouter(prefix="/inventory", tags=["Inventory"])
 @router.get("/")
 async def get_all_inventory(db = Depends(get_db)):
     cursor = db.inventory.find({})
-    items = await cursor.to_list(length=100)
+    items = await cursor.to_list(length=1000)
     for item in items:
         item["_id"] = str(item["_id"])
     return {"success": True, "data": items}
