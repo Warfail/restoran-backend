@@ -101,6 +101,13 @@ async def get_menu(menu_id: str, db = Depends(get_db)):
             menu = await db.menus.find_one({"_id": ObjectId(menu_id)})
         except:
             pass
+            
+    if not menu:
+        # Fallback terakhir, coba sebagai _id string biasa
+        try:
+            menu = await db.menus.find_one({"_id": menu_id})
+        except:
+            pass
     
     if not menu:
         raise HTTPException(status_code=404, detail="Menu not found")
@@ -116,6 +123,13 @@ async def update_menu(menu_id: str, menu_data: dict, db = Depends(get_db)):
     if not menu:
         try:
             query = {"_id": ObjectId(menu_id)}
+            menu = await db.menus.find_one(query)
+        except:
+            pass
+            
+    if not menu:
+        try:
+            query = {"_id": menu_id}
             menu = await db.menus.find_one(query)
         except:
             pass
@@ -150,6 +164,13 @@ async def delete_menu(menu_id: str, db = Depends(get_db)):
     if not menu:
         try:
             query = {"_id": ObjectId(menu_id)}
+            menu = await db.menus.find_one(query)
+        except:
+            pass
+            
+    if not menu:
+        try:
+            query = {"_id": menu_id}
             menu = await db.menus.find_one(query)
         except:
             pass

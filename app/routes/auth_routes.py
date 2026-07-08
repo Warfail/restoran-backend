@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
 from app.config.database import get_db
 import os
 import uuid
@@ -34,6 +34,16 @@ async def login(credentials: dict, db = Depends(get_db)):
 import uuid
 from datetime import datetime
 
+def process_forgot_password_email(email: str, reset_link: str):
+    from app.utils.email_service import send_reset_email
+    email_sent = send_reset_email(email, reset_link)
+    
+    if not email_sent:
+        print("=" * 50)
+        print(f"⚠️ SIMULASI EMAIL TERKIRIM KE: {email}")
+        print(f"🔗 LINK RESET: {reset_link}")
+        print("=" * 50)
+
 @router.post("/forgot-password")
 async def forgot_password(data: dict, db = Depends(get_db)):
     email = data.get("email")
@@ -55,18 +65,13 @@ async def forgot_password(data: dict, db = Depends(get_db)):
         }}
     )
     
-    # 🔥 KIRIM VIA EMAIL
+    # 🔥 KIRIM VIA EMAIL (di background sepenuhnya)
     frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
     reset_link = f"{frontend_url}/reset-password?token={reset_token}"
     
-    from app.utils.email_service import send_reset_email
-    email_sent = send_reset_email(email, reset_link)
-    
-    if not email_sent:
-        print("=" * 50)
-        print(f"⚠️ SIMULASI EMAIL TERKIRIM KE: {email}")
-        print(f"🔗 LINK RESET: {reset_link}")
-        print("=" * 50)
+    import asyncio
+    from fastapi.concurrency import run_in_threadpool
+    asyncio.create_task(run_in_threadpool(process_forgot_password_email, email, reset_link))
     
     return {"success": True, "message": "Tautan reset telah dikirim ke email Anda."}
 @router.post("/reset-password")
