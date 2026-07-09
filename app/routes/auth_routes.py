@@ -52,8 +52,7 @@ async def forgot_password(data: dict, db = Depends(get_db)):
     
     user = await db.users.find_one({"email": email})
     if not user:
-        # Jangan kasih tahu email ga ditemukan (biar aman)
-        return {"success": True, "message": "Jika email terdaftar, instruksi reset telah dikirim."}
+        raise HTTPException(status_code=404, detail="Email tidak terdaftar")
     
     # Generate token
     reset_token = str(uuid.uuid4())
