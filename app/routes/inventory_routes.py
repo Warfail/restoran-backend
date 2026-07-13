@@ -28,11 +28,11 @@ async def get_inventory_item(item_id: str, db = Depends(get_db)):
 
 @router.post("/")
 async def create_inventory_item(item_data: dict, db = Depends(get_db)):
-    # Konversi stock ke integer
+    # Konversi stock ke float agar tidak memotong desimal
     try:
-        stock = int(item_data.get("stock", 0))
+        stock = float(item_data.get("stock", 0))
     except:
-        stock = 0
+        stock = 0.0
     
     item_dict = {
         "name": str(item_data.get("name", "")),
@@ -54,12 +54,12 @@ async def update_inventory_stock(item_id: str, update_data: dict, db = Depends(g
     if not ObjectId.is_valid(item_id):
         raise HTTPException(status_code=400, detail="Invalid ID")
     
-    # Konversi stock ke integer
+    # Konversi stock ke float agar tidak memotong desimal
     if "stock" in update_data:
         try:
-            update_data["stock"] = int(update_data["stock"])
+            update_data["stock"] = float(update_data["stock"])
         except:
-            update_data["stock"] = 0
+            update_data["stock"] = 0.0
     
     update_data["updatedAt"] = datetime.now()
     update_data.pop("_id", None)
@@ -69,7 +69,7 @@ async def update_inventory_stock(item_id: str, update_data: dict, db = Depends(g
         {"$set": update_data}
     )
     
-    if result.modified_count == 0:
+    if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Item not found")
     
     return {"success": True, "message": "Stock updated"}
