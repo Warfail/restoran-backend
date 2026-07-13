@@ -51,9 +51,6 @@ async def create_inventory_item(item_data: dict, db = Depends(get_db)):
 
 @router.put("/{item_id}")
 async def update_inventory_stock(item_id: str, update_data: dict, db = Depends(get_db)):
-    if not ObjectId.is_valid(item_id):
-        raise HTTPException(status_code=400, detail="Invalid ID")
-    
     # Konversi stock ke float agar tidak memotong desimal
     if "stock" in update_data:
         try:
@@ -64,8 +61,15 @@ async def update_inventory_stock(item_id: str, update_data: dict, db = Depends(g
     update_data["updatedAt"] = datetime.now()
     update_data.pop("_id", None)
     
+    # Support both ObjectId and custom string IDs (e.g. INV007)
+    if ObjectId.is_valid(item_id):
+        query = {"_id": ObjectId(item_id)}
+    else:
+        # Cari berdasarkan _id sebagai string atau ingredientId
+        query = {"$or": [{"_id": item_id}, {"ingredientId": item_id}]}
+    
     result = await db.inventory.update_one(
-        {"_id": ObjectId(item_id)},
+        query,
         {"$set": update_data}
     )
     
