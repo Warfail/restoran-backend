@@ -45,6 +45,8 @@ async def get_all_menus(
     page: int = 1, 
     limit: int = 10,
     category: str = None,  # 🔥 TAMBAHKAN PARAMETER CATEGORY
+    search: str = None,
+    exclude_image: bool = False,
     db = Depends(get_db)
 ):
     try:
@@ -56,22 +58,28 @@ async def get_all_menus(
 
         skip = (page - 1) * limit
         
-        # 🔥 FILTER KATEGORI
+        # 🔥 FILTER KATEGORI & SEARCH
         filter_query = {}
         if category:
             filter_query["category"] = category
+        if search:
+            filter_query["name"] = {"$regex": search, "$options": "i"}
+            
+        projection = {
+            "_id": 1,
+            "name": 1,
+            "price": 1,
+            "category": 1,
+            "stock": 1,
+            "isAvailable": 1
+        }
+        
+        if not exclude_image:
+            projection["image"] = 1
         
         cursor = db.menus.find(
             filter_query,
-            {
-                "_id": 1,
-                "name": 1,
-                "price": 1,
-                "category": 1,
-                "image": 1,
-                "stock": 1,
-                "isAvailable": 1
-            }
+            projection
         ).skip(skip).limit(limit)
         
         menus = await cursor.to_list(length=limit)
