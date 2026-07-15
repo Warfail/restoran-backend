@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi.responses import RedirectResponse
+import base64
 from datetime import datetime
 from bson import ObjectId
 from app.config.database import get_db
@@ -45,8 +47,6 @@ async def get_all_menus(
     page: int = 1, 
     limit: int = 10,
     category: str = None,  # 🔥 TAMBAHKAN PARAMETER CATEGORY
-    search: str = None,
-    exclude_image: bool = False,
     db = Depends(get_db)
 ):
     try:
@@ -58,28 +58,21 @@ async def get_all_menus(
 
         skip = (page - 1) * limit
         
-        # 🔥 FILTER KATEGORI & SEARCH
+        # 🔥 FILTER KATEGORI
         filter_query = {}
         if category:
             filter_query["category"] = category
-        if search:
-            filter_query["name"] = {"$regex": search, "$options": "i"}
-            
-        projection = {
-            "_id": 1,
-            "name": 1,
-            "price": 1,
-            "category": 1,
-            "stock": 1,
-            "isAvailable": 1
-        }
-        
-        if not exclude_image:
-            projection["image"] = 1
         
         cursor = db.menus.find(
             filter_query,
-            projection
+            {
+                "_id": 1,
+                "name": 1,
+                "price": 1,
+                "category": 1,
+                "stock": 1,
+                "isAvailable": 1
+            }
         ).skip(skip).limit(limit)
         
         menus = await cursor.to_list(length=limit)
@@ -150,6 +143,11 @@ async def update_menu(menu_id: str, menu_data: dict, db = Depends(get_db)):
     menu_data.pop("menuId", None)
     menu_data.pop("createdAt", None)
     
+    # Prevent overwriting image with endpoint URL
+    image_val = menu_data.get("image", "")
+    if image_val and "/menu/" in image_val and "/image" in image_val:
+        menu_data.pop("image", None)
+    
     # Tambah updatedAt
     menu_data["updatedAt"] = datetime.now()
     
@@ -192,3 +190,40 @@ async def delete_menu(menu_id: str, db = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Menu not found")
     
     return {"success": True, "message": "Menu deleted"}
+
+@router.get("/{menu_id}/image")
+async def get_menu_image(menu_id: str, db = Depends(get_db)):
+    query = {"menuId": menu_id}
+    menu = await db.menus.find_one(query, {"image": 1})
+    if not menu:
+        try:
+            query = {"_id": ObjectId(menu_id)}
+            menu = await db.menus.find_one(query, {"image": 1})
+        except:
+            pass
+            
+    if not menu:
+        try:
+            query = {"_id": menu_id}
+            menu = await db.menus.find_one(query, {"image": 1})
+        except:
+            pass
+            
+    if not menu or "image" not in menu:
+        return Response(content=b"", media_type="image/png")
+        
+    image_data = menu["image"]
+    if image_data and image_data.startswith("data:image"):
+        try:
+            header, base64_str = image_data.split(",", 1)
+            media_type = header.split(":")[1].split(";")[0]
+            image_bytes = base64.b64decode(base64_str)
+            return Response(content=image_bytes, media_type=media_type)
+        except Exception as e:
+            print("Error decoding image:", e)
+            return Response(content=b"", media_type="image/png")
+            
+    if image_data and image_data.startswith("http"):
+        return RedirectResponse(url=image_data)
+        
+    return Response(content=b"", media_type="image/png")
