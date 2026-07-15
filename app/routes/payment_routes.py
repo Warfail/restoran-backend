@@ -33,6 +33,14 @@ async def create_transaction(order_data: dict, db=Depends(get_db)):
     order = await db.orders.find_one({"orderId": order_id})
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
+        
+    if order.get("midtrans_token"):
+        return {
+            "success": True,
+            "token": order["midtrans_token"],
+            "redirect_url": order.get("midtrans_redirect_url"),
+            "order_id": order_id,
+        }
     
     # Build param untuk Midtrans
     param = {
