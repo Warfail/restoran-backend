@@ -22,7 +22,7 @@ async def get_all_orders(db = Depends(get_db)):
     """
     try:
         cursor = db.orders.find({}).sort("createdAt", -1)
-        orders = await cursor.to_list(length=100)
+        orders = await cursor.to_list(length=None)
         
         for order in orders:
             order["_id"] = str(order["_id"])
