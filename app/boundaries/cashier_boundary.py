@@ -61,21 +61,6 @@ async def get_ongoing_orders(db = Depends(get_db)):
         return {"success": False, "error": str(e), "data": []}
 
 
-@router.post("/orders/cleanup_unprinted")
-async def cleanup_unprinted(db = Depends(get_db)):
-    """
-    Temporary endpoint to mark all completed orders as printed.
-    """
-    try:
-        result = await db.orders.update_many(
-            {"status": "completed", "isPrinted": {"$ne": True}},
-            {"$set": {"isPrinted": True}}
-        )
-        return {"success": True, "modified_count": result.modified_count}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-
 # ========== ENDPOINT YANG UDAH ADA ==========
 @router.get("/order/{order_id}")
 async def get_order_detail(
