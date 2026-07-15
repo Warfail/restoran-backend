@@ -179,7 +179,9 @@ async def reduce_stock(data: dict, db = Depends(get_db)):
 
             menu = find_menu(menu_id)
             if not menu:
-                errors.append(f"Menu {menu_id} not found")
+                # If menu was deleted from database, we can't get its recipe.
+                # Just skip it so it doesn't block the kitchen from completing the order.
+                print(f"WARNING: Menu {menu_id} not found. Skipping stock reduction.")
                 continue
 
             recipe = menu.get("recipe", [])
