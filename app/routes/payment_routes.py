@@ -70,7 +70,7 @@ async def create_transaction(order_data: dict, db=Depends(get_db)):
     
     payment_method = order_data.get("paymentMethod")
     if payment_method == "qris":
-        param["enabled_payments"] = ["gopay", "qris", "shopeepay"]
+        param["enabled_payments"] = ["qris"]
     elif payment_method == "transfer":
         param["enabled_payments"] = ["bca_va", "bni_va", "bri_va", "permata_va", "echannel", "other_va"]
         
