@@ -57,7 +57,8 @@ async def create_order(order_data: dict, db = Depends(get_db)):
                 "name": menu.get("name"),
                 "price": price,
                 "quantity": quantity,
-                "subtotal": subtotal
+                "subtotal": subtotal,
+                "category": menu.get("category", item.get("category", "Makanan"))
             })
         
         # Generate order ID
