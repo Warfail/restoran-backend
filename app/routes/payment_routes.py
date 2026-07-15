@@ -61,7 +61,6 @@ async def create_transaction(order_data: dict, db=Depends(get_db)):
             }
             for idx, item in enumerate(order.get("items", []))
         ],
-        # "enabled_payments" dihapus agar menampilkan semua opsi dari dashboard midtrans
         "callbacks": {
             "finish": f"{FRONTEND_URL}/order-status?orderId={order_id}",
             "unfinish": f"{FRONTEND_URL}/order-status?orderId={order_id}",
@@ -69,6 +68,12 @@ async def create_transaction(order_data: dict, db=Depends(get_db)):
         }
     }
     
+    payment_method = order_data.get("paymentMethod")
+    if payment_method == "qris":
+        param["enabled_payments"] = ["gopay", "qris", "shopeepay"]
+    elif payment_method == "transfer":
+        param["enabled_payments"] = ["bca_va", "bni_va", "bri_va", "permata_va", "echannel", "other_va"]
+        
     try:
         response = snap.create_transaction(param)
         token = response["token"]
