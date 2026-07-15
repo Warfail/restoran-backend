@@ -9,4 +9,5 @@ midtransclient
 passlib                 
 bcrypt
 sendgrid
-httpx               
+httpx
+xlsxwriter
