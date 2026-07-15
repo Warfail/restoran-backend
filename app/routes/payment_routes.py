@@ -53,15 +53,7 @@ async def create_transaction(order_data: dict, db=Depends(get_db)):
             }
             for idx, item in enumerate(order.get("items", []))
         ],
-        "enabled_payments": [
-            "credit_card",
-            "bank_transfer_bca",
-            "bank_transfer_bni",
-            "bank_transfer_bri",
-            "bank_transfer_permata",
-            # "gopay",
-            # "qris",
-        ],
+        # "enabled_payments" dihapus agar menampilkan semua opsi dari dashboard midtrans
         "callbacks": {
             "finish": f"{FRONTEND_URL}/order-status?orderId={order_id}",
             "unfinish": f"{FRONTEND_URL}/order-status?orderId={order_id}",
